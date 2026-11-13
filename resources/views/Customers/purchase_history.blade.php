@@ -1,0 +1,161 @@
+@extends('layouts.app')
+@push('styles')
+    {{-- image view lib --}}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.3/viewer.min.css" />
+
+    {{-- to adjust image viwer bg color --}}
+    <style>
+        .viewer-backdrop {
+            background-color: rgba(0, 0, 0, 0.7) !important;
+        }
+
+        .info-value {
+            color: #2d3748;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .info-label {
+            color: #718096;
+            font-size: 14px;
+            font-weight: 500;
+        }
+    </style>
+@endpush
+@section('title', 'Order Management')
+@section('content')
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                <!-- start page title -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                            <h4 class="mb-sm-0 font-size-18">Purchase History Of {{ $fullname }}</h4>
+
+                            <div class="page-title-right">
+                                <ol class="breadcrumb m-0">
+                                    <li class="breadcrumb-item"><a href="javascript: void(0);">Dashboard</a></li>
+                                    <li class="breadcrumb-item active">Purchase History</li>
+                                </ol>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+                <!-- end page title -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <table id="datatable" class="table table-bordered dt-responsive w-100">
+                                    <thead>
+                                        <tr class="text-center">
+                                            <th class="text-start" style="width: 5%">#</th>
+                                            <th class="text-start" style="width: 10%">Date</th>
+                                            <th class="text-start" style="width: 15%">Customer Name</th>
+                                            <th class="text-start" style="width: 15%">Customer Contact</th>
+                                            <th class="text-start" style="width: 15%">Total Amount</th>
+                                            <th class="text-start" style="width: 15%">Payment Status</th>
+                                            {{-- <th class="text-start" style="width: 12%">Item Count</th> --}}
+                                            <th class="text-start" style="width: 12%">Order Status</th>
+                                            <th class="text-start" style="width: 13%">Action</th>
+
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($orders as $order)
+                                            <tr>
+                                                <td class="text-center">
+                                                    {{ $loop->index + $orders->firstItem() }}
+                                                </td>
+                                                <td class="text-start">{{ $order->created_at?->format('d-m-Y') }}</td>
+                                                <td class="text-start">
+                                                    {{ $order->customer?->first_name ?? ('' . ' ' . $order->customer?->last_name ?? '') }}
+                                                </td>
+                                                <td class="text-start">{{ $order->customer->phone ?? '' }}</td>
+                                                <td class="text-start">{{ $order->total_amount }}</td>
+                                                <td class="text-start">{{ $order->payment_status ?? '' }}</td>
+                                                {{-- <td class="text-start">{{ $order->items_count ?? '' }}</td> --}}
+                                                <td class="text-start">
+                                                    <button class="btn btn-light btn-sm statusBtn"
+                                                        data-curstatus="{{ $order->status ?? '' }}"
+                                                        data-id="{{ $order->order_id ?? '' }}"
+                                                        href="#">{{ ucwords($order->status) ?? '' }}</button>
+                                                </td>
+                                                <td class="text-start">
+                                                    {{-- <button class="btn BtnDelete m-0"
+                                                        data-id="{{ encrypt($order->id) }}"
+                                                        data-name="{{ $order->name }}">
+                                                        <i class="fa fa-trash" aria-hidden="true"></i></button> --}}
+                                                    {{-- <button class="btn btn-sm">Generate Invoice</button> --}}
+                                                    <a href="{{ route('order.show', encrypt($order->order_id)) }}"
+                                                        class="btn btn-light btn-sm">
+                                                        Order details
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                {{ $orders->links() }}
+                            </div>
+                        </div>
+                    </div> <!-- end col -->
+                </div> <!-- end row -->
+
+            </div> <!-- container-fluid -->
+        </div>
+        <!-- End Page-content -->
+
+        <div class="modal fade modal-md" id="showStatusModal" tabindex="-1" aria-labelledby="showStatusModalLabel"
+            aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form id="changeStatusForm">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="showStatusModalLabel">Update Order Status</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+
+                        {{-- hidden input (inside form now) --}}
+                        <input type="hidden" name="hidden_id" id="hidden_id">
+
+                        <div class="modal-body">
+                            <div class="mb-3 text-center">
+                                <span class="fw-semibold">Current Status:</span>
+                                <span class="ms-2 info-value"></span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="statusSelect" class="form-label">Change Status</label>
+                                <select name="statusSelect" id="statusSelect" class="form-select">
+                                    <option value="pending">Pending</option>
+                                    <option value="confirmed">Confirmed</option>
+                                    <option value="processing">Processing</option>
+                                    <option value="shipped">Shipped</option>
+                                    <option value="delivered">Delivered</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="cancelled">Cancelled</option>
+                                    <option value="refunded">Refunded</option>
+                                </select>
+                            </div>
+                        </div>
+
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-primary">Confirm</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <x-footer />
+    </div>
+@endsection
+
+@push('page-scripts')
+    <script src="{{ asset('assets/js/order.js') }}"></script>
+@endpush
