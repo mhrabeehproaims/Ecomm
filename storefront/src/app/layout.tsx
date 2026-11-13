@@ -5,11 +5,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
-  title: { default: 'Vantara — Everyday, considered.', template: '%s | Vantara' },
-  description: 'Explore the Vantara collection. Thoughtful discoveries, clear product details and a little more care for your everyday.',
+  title: { default: 'Vanthara — Everyday, considered.', template: '%s | Vanthara' },
+  description: 'Explore the Vanthara collection. Thoughtful discoveries, clear product details and a little more care for your everyday.',
   robots: { index: indexable, follow: indexable },
   icons: { icon: '/favicon.png' },
-  openGraph: { type: 'website', siteName: 'Vantara', locale: 'en_IN', title: 'Vantara — Everyday, considered.', description: 'Thoughtful discoveries for your everyday.' },
+  openGraph: { type: 'website', siteName: 'Vanthara', locale: 'en_IN', title: 'Vanthara — Everyday, considered.', description: 'Thoughtful discoveries for your everyday.' },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

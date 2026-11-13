@@ -16,6 +16,7 @@ return [
     */
 
     'default' => env('CACHE_STORE', 'database'),
+    'limiter' => env('STOREFRONT_RATE_LIMIT_STORE', 'storefront_limits'),
 
     /*
     |--------------------------------------------------------------------------
@@ -32,6 +33,12 @@ return [
     */
 
     'stores' => [
+
+        'storefront_limits' => [
+            'driver' => 'file',
+            'path' => env('STOREFRONT_RATE_LIMIT_PATH', storage_path('framework/cache/storefront-limits')),
+            'lock_path' => env('STOREFRONT_RATE_LIMIT_PATH', storage_path('framework/cache/storefront-limits')),
+        ],
 
         'array' => [
             'driver' => 'array',

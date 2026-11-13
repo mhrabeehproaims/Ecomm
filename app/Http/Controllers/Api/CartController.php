@@ -3,163 +3,92 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Cart;
 use App\Models\Product;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Storefront\CheckoutService;
+use App\Services\Storefront\Money;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CartController extends Controller
 {
     public function index(Request $request)
     {
-        $user = $request->user();
-        $sessionId = 0; //$request->session()->getId();
+        return response()->json(['status' => 'success', 'data' => Cart::with('product.primaryImage')->where('user_id', $request->user()->customer_id)->get()]);
+    }
 
-        $cartItems = Cart::with(['product.primaryImage'])->when($user->customer_id, function ($q) use ($user, $sessionId) {
-            if ($user) {
-                $q->where('user_id', $user->customer_id);
-            } else {
-                $q->where('session_id', $sessionId);
-            }
-        })->get();
+    private function product(Request $request): int
+    {
+        $request->validate(['product_id' => 'required|string|max:4096']);
+        try {
+            $id = decrypt($request->product_id);
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages(['product_id' => 'Invalid product ID.']);
+        }
+        if (! is_numeric($id) || (int) $id < 1) {
+            throw ValidationException::withMessages(['product_id' => 'Invalid product ID.']);
+        }
 
-
-        return response()->json([
-            'status' => 'success',
-            'data'    => $cartItems,
-        ], 200);
+        return (int) $id;
     }
 
     public function store(Request $request)
     {
-
-        $requestData = $request->all();
-        if (isset($requestData['product_id'])) {
-            try {
-                $requestData['product_id'] = decrypt($requestData['product_id']);
-            } catch (\Exception $e) {
-                return response()->json(['error' => 'Invalid product ID'], 400);
+        $id = $this->product($request);
+        $data = $request->validate(['quantity' => 'required|integer|min:1|max:99', 'options' => 'nullable|array|max:20']);
+        $cart = DB::transaction(function () use ($request, $id, $data) {
+            $customer = $request->user()->customer_id;
+            app(CheckoutService::class)->lockCustomer($customer);
+            $product = Product::where('product_id', $id)->lockForUpdate()->first();
+            $existing = Cart::where('user_id', $customer)->where('product_id', $id)->orderBy('cart_id')->lockForUpdate()->get();
+            if (! $product || (int) $product->status !== 1 || $existing->sum('quantity') + $data['quantity'] > min(99, $product->stock)) {
+                throw ValidationException::withMessages(['quantity' => 'Insufficient available stock.']);
             }
-        }
+            $cart = $existing->first() ?? new Cart(['user_id' => $customer, 'session_id' => 0, 'product_id' => $id, 'quantity' => 0]);
+            $cart->quantity += $data['quantity'];
+            $cart->price = Money::decimal(Money::minor($product->default_price_value));
+            $cart->options = isset($data['options']) ? json_encode($data['options']) : null;
+            $cart->save();
 
-        validator($requestData, [
-            'product_id' => 'required|exists:products,product_id',
-            'quantity'   => 'required|integer|min:1',
-            'options'    => 'nullable',
-        ])->validate();
+            return $cart;
+        }, 5);
 
-        $user = Auth::user();
-        $sessionId = 0; //$request->session()->getId();
-        $product_id = decrypt($request->product_id);
-
-        $product = Product::findOrFail($product_id);
-
-        $cartItem = Cart::firstOrNew([
-            'user_id'    => $user->customer_id,
-            'session_id' => $sessionId, //$user ? null : $sessionId,
-            'product_id' => $product_id,
-        ]);
-
-        $cartItem->quantity = ($cartItem->exists ? $cartItem->quantity : 0) + $request->quantity;
-        $cartItem->price    = $product->default_price_value;
-        $cartItem->options  = $request->options ?? null;
-        $cartItem->save();
-
-        return response()->json([
-            'status' => 'success',
-            'data'    => $cartItem,
-        ], 201);
-    }
-
-    public function remove(Request $request)
-    {
-        $user = Auth::user();
-        $product_id = decrypt($request->product_id);
-
-        $request->merge(['product_id' => $product_id]);
-
-        $request->validate([
-            'product_id' => [
-                'required',
-                Rule::exists('carts', 'product_id')->where('user_id', $user->customer_id),
-            ],
-        ]);
-
-        $deleted = Cart::where(['user_id' => $user->customer_id, 'product_id' => $product_id])->delete();
-
-        if ($deleted) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Product removed from cart successfully'
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Product not found in cart'
-        ], 404);
+        return response()->json(['status' => 'success', 'data' => $cart], 201);
     }
 
     public function change_count(Request $request)
     {
-        $user = Auth::user();
+        $id = $this->product($request);
+        $data = $request->validate(['count' => 'required|integer|min:1|max:99']);
+        $cart = DB::transaction(function () use ($request, $id, $data) {
+            $customer = $request->user()->customer_id;
+            app(CheckoutService::class)->lockCustomer($customer);
+            $product = Product::where('product_id', $id)->lockForUpdate()->first();
+            $entries = Cart::where('user_id', $customer)->where('product_id', $id)->orderBy('cart_id')->lockForUpdate()->get();
+            $cart = $entries->first();
+            abort_unless($cart, 404, 'Item not found in cart.');
+            if (! $product || (int) $product->status !== 1 || min(99, $product->stock) < $data['count'] + $entries->sum('quantity') - $cart->quantity) {
+                throw ValidationException::withMessages(['count' => 'Insufficient available stock.']);
+            }
+            $cart->quantity = $data['count'];
+            $cart->save();
 
-        $count = $request->count ?? 1;
-        $product_id = decrypt($request->product_id);
+            return $cart;
+        }, 5);
 
-        $request->merge(['product_id' => $product_id]);
+        return response()->json(['status' => 'success', 'message' => 'Cart updated successfully', 'data' => $cart]);
+    }
 
-        // Get the cart item
-        $item = Cart::where([
-            'product_id' => $product_id,
-            'user_id' => $user->customer_id
-        ])->first();
+    public function remove(Request $request)
+    {
+        $id = $this->product($request);
+        DB::transaction(function () use ($request, $id) {
+            app(CheckoutService::class)->lockCustomer($request->user()->customer_id);
+            $deleted = Cart::where('user_id', $request->user()->customer_id)->where('product_id', $id)->delete();
+            abort_unless($deleted, 404, 'Product not found in cart.');
+        }, 5);
 
-        if (!$item) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Item not found in cart',
-            ], 404);
-        }
-
-        // Check product stock
-        $product = Product::find($product_id);
-
-        if (!$product) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Product not found',
-            ], 404);
-        }
-
-        // Validate stock availability
-        if ($product->stock < $count) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Insufficient stock available',
-                'available_stock' => $product->stock,
-                'requested_quantity' => $count
-            ], 400);
-        }
-
-        // Check if product is out of stock
-        if ($product->stock <= 0) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Product is out of stock',
-            ], 400);
-        }
-
-        // Update cart quantity
-        $item->update(['quantity' => $count]);
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Cart updated successfully',
-            'data' => $item,
-            'available_stock' => $product->stock
-        ], 200);
+        return response()->json(['status' => 'success', 'message' => 'Product removed from cart successfully']);
     }
 }

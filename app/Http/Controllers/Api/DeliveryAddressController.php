@@ -4,127 +4,78 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DeliverAddressRequest;
-use App\Models\DeliveryAddress;
+use App\Services\Storefront\CheckoutService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class DeliveryAddressController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
-        //
+        return response()->json(['status' => 'success', 'data' => DB::table('delivery_addresses')->where('customer_id', $request->user()->customer_id)->orderBy('address_id')->get()]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function show(Request $request, string $id)
     {
-        //
+        $address = DB::table('delivery_addresses')->where('customer_id', $request->user()->customer_id)->where('address_id', $id)->first();
+        abort_unless($address, 404, 'Address not found.');
+
+        return response()->json(['status' => 'success', 'data' => $address]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(DeliverAddressRequest $request)
     {
-        $data = [
-            'customer_id' => Auth::user()->customer_id,
-            'phone' => $request->validated()['phone'],
-            'email' => $request->validated()['email'],
-            'address_line1' => $request->validated()['address_line1'],
-            'address_line2' => $request->validated()['address_line2'],
-            'city' => $request->validated()['city'],
-            'state' => $request->validated()['state'],
-            'country' => $request->validated()['country'],
-            'postal_code' => $request->validated()['postal_code'],
-            'is_default' => $request->validated()['is_default'],
-        ];
-
-        $addressQuery = DeliveryAddress::where('customer_id', Auth::user()->customer_id);
-
-        if (!$addressQuery->exists()) {
-            $data['is_default'] = 1;
-        } elseif (!empty($data['is_default'])) {
-            $addressQuery
-                ->where('is_default', 1)
-                ->update(['is_default' => 0]);
-        }
-
-        DeliveryAddress::create($data);
-
-        return response()->json([
-            'status' => 'success',
-        ]);
+        return $this->save($request);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(DeliverAddressRequest $request, string $id)
     {
-        $data = [
-            'phone' => $request->validated()['phone'],
-            'email' => $request->validated()['email'],
-            'address_line1' => $request->validated()['address_line1'],
-            'address_line2' => $request->validated()['address_line2'],
-            'city' => $request->validated()['city'],
-            'state' => $request->validated()['state'],
-            'country' => $request->validated()['country'],
-            'postal_code' => $request->validated()['postal_code'],
-            'is_default' => $request->validated()['is_default'],
-        ];
-
-        if ($request->validated()['is_default']) {
-            DeliveryAddress::where('customer_id', Auth::user()->customer_id)
-                ->where('is_default', 1)
-                ->update(['is_default' => 0]);
-        }
-
-        DeliveryAddress::where('address_id', $id)->update($data);
-
-        return response()->json([
-            'status' => 'success',
-        ]);
+        return $this->save($request, $id);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
+    private function save(DeliverAddressRequest $request, ?string $id = null)
     {
-        $user_id = Auth::user()->customer_id;
-        $address = DeliveryAddress::where(['customer_id' => $user_id, 'address_id' => $id])->first();
-        if (!$address) {
-            return response()->json([
-                'status' => 'failed',
-                'message' => 'Address not found'
-            ]);
-        }
+        $customer = $request->user()->customer_id;
+        $data = $request->validated();
+        $data = array_replace(['email' => null, 'address_line2' => null, 'country' => 'India', 'is_default' => false], $data);
+        $data['country'] ??= 'India';
+        $data['is_default'] = (bool) $data['is_default'];
+        DB::transaction(function () use ($customer, $id, $data) {
+            app(CheckoutService::class)->lockCustomer($customer);
+            $owned = DB::table('delivery_addresses')->where('customer_id', $customer);
+            if ($id) {
+                abort_unless((clone $owned)->where('address_id', $id)->exists(), 404, 'Address not found.');
+            }
+            if (! $id && ! (clone $owned)->exists()) {
+                $data['is_default'] = true;
+            }
+            if ($data['is_default']) {
+                (clone $owned)->where('is_default', 1)->update(['is_default' => false, 'updated_at' => now()]);
+            }
+            if ($id) {
+                (clone $owned)->where('address_id', $id)->update([...$data, 'updated_at' => now()]);
+            } else {
+                DB::table('delivery_addresses')->insert([...$data, 'customer_id' => $customer, 'created_at' => now(), 'updated_at' => now()]);
+            }
+        }, 5);
 
-        $address->delete();
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Address Deleted'
-        ]);
+        return response()->json(['status' => 'success']);
+    }
+
+    public function destroy(Request $request, string $id)
+    {
+        DB::transaction(function () use ($request, $id) {
+            $customer = $request->user()->customer_id;
+            app(CheckoutService::class)->lockCustomer($customer);
+            $owned = DB::table('delivery_addresses')->where('customer_id', $customer);
+            $address = (clone $owned)->where('address_id', $id)->first();
+            abort_unless($address, 404, 'Address not found.');
+            (clone $owned)->where('address_id', $id)->delete();
+            if ($address->is_default && ($next = (clone $owned)->orderBy('address_id')->first())) {
+                (clone $owned)->where('address_id', $next->address_id)->update(['is_default' => true, 'updated_at' => now()]);
+            }
+        }, 5);
+
+        return response()->json(['status' => 'success', 'message' => 'Address Deleted']);
     }
 }

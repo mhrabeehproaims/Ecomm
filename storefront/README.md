@@ -1,94 +1,102 @@
-# Vantara storefront — phase 1
+# Vanthara storefront
 
-Independent Next.js App Router + React application. The Laravel API, database schema, root Vite setup and Blade admin are unchanged. This is the storefront foundation, not a completed transactional store.
+The existing customer frontend is **Next.js 16.4.6 App Router + React + TypeScript + Tailwind 4**, not React + Vite. Root Vite builds Laravel assets. Existing code was preserved; brand colors remain plum `#7C0046` and green `#1C3F1D`.
 
-## Run locally (Windows PowerShell)
+Public browsing, customer shopping and the approved Laravel checkout safeguards are implemented locally. **Production checkout and live payments remain disabled.** See the [implementation, verification and release blockers](../docs/STOREFRONT-CHECKOUT-IMPLEMENTATION.md), [historical approval proposal](../docs/approvals/CUSTOMER-API-COMPLETION.md) and [earlier visual QA](../docs/STOREFRONT-VISUAL-QA.md).
 
-From the Laravel root, in one terminal:
+## Local setup (Windows PowerShell)
+
+This workspace now has an ignored `.env.local` with normal loopback origins, a random development session secret and sandbox checkout disabled. Preserve it. The copy/generation steps below apply to a fresh checkout; never reuse its development secret for deployment.
+
+Run the existing Laravel API from the root:
 
 ```powershell
 php artisan serve --host=127.0.0.1 --port=8137 --no-reload
 ```
 
-In another terminal:
+In a separate terminal:
 
 ```powershell
 cd C:\laragon\www\vanthara-main\storefront
-Copy-Item .env.example .env.local
+if (!(Test-Path -LiteralPath '.env.local')) { Copy-Item .env.example .env.local }
 npm.cmd ci
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+# Put the generated value in STOREFRONT_SESSION_SECRET in .env.local.
 npm.cmd run dev
 ```
 
-Open http://127.0.0.1:3000. Use `npm.cmd` on Windows when PowerShell blocks npm.ps1. Node >=20.9 is required; Node 26.12.1 was available during development. Exact package versions are locked in package-lock.json; Next.js is pinned to 16.4.6. Never run Laravel migrations/seeders against production for this frontend.
-
-For an existing Laragon virtual host, set `LARAVEL_API_ORIGIN` to that origin (no `/api` suffix). Change `STOREFRONT_URL` to the storefront's real origin. Environment changes require restarting Next.js; changing media origin also requires a new production build. No credentials are needed in frontend environment variables. Use HTTPS for public storefront and API media origins.
+Open http://127.0.0.1:3000. Preserve an existing `.env.local`. Node >=20.9 is required; use npm.cmd when PowerShell blocks npm.ps1. Set `LARAVEL_API_ORIGIN` without `/api` and `STOREFRONT_URL` to the exact browser origin; restart Next after changes. Public deployment needs HTTPS and a deployment-managed random session secret. No Laravel bearer token or payment secret belongs in NEXT_PUBLIC variables. No production migrations/seeders are part of frontend setup.
 
 ```powershell
-npm.cmd run typecheck
 npm.cmd test
+npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run start
 # With the production server running:
 npm.cmd run smoke
 ```
 
-## Implemented
+If Node's os.userInfo fails inside an execution sandbox before tsx starts, use a normal authorized terminal for the same tests; do not skip assertions.
 
-- Shared responsive header, actual Vantara logo, search suggestions, horizontal category navigation, footer, five-item mobile navigation, focus styles and skip link.
-- Editorial homepage with real Laravel categories, active/date-filtered banners, featured products, best-selling products, newest active products, special offers and brands when records exist. Offer collections require a valid backend offer amount (including a genuine zero offer), and omit missing/invalid amounts. Empty sections display truthful empty states or are omitted. No invented inventory, customer counts, reviews, discounts or free shipping. Newsletter omitted.
-- Server-rendered catalog, keyword search and exact category filtering; brand/subcategory/stock/maximum-price filtering, sorting and 12-item pagination over the loaded full catalog response. The UI documents this API limitation. No query parameters are passed blindly to Laravel.
-- Category landing/index pages; read-only product details, multi-image gallery, specifications, backend-selected prices/offers, active-catalog check and related products. Rich descriptions are rendered as plain text; raw comments/customers are discarded for privacy.
-- Runtime-validated API schemas, fixed server-only Laravel origin, six-second timeout, explicit invalid/unavailable/empty states, 60-second public cache, fresh detail reads, same-origin allowlisted search handler. No bearer tokens or generic open proxy.
-- Metadata, home/catalog/category canonicals, conservative sitemap, product structured data, local optimized editorial hero, lazy media below the fold and reduced-motion styles. Private/HTTP development media is served without Next's server-side optimizer; public configured HTTPS storage can use it. Media errors show a fallback.
-- Live return-policy page reads active policies from `GET /api/return-policies` using validated title/window/type/conditions fields and removes internal fields. An empty response differs visibly from an unavailable API; no terms are invented. Policy HTML is displayed as plain text. About/help/privacy/terms/shipping/contact/wholesale pages retain clearly provisional content. Account/wishlist/bag pages disclose unavailable phase-2 features; they do not simulate sessions or transactions.
+## Customer integration
 
-## Structure
+Registration/mobile-password login/logout use encrypted HttpOnly cookies and same-origin JSON writes. Profile, delivery addresses, wishlist, cart add/quantity/removal, coupon validation, owned order history/detail and eligible return requests use actual Laravel APIs. Checkout reviews a server-calculated expiring quote before idempotent order placement. Address snapshots, atomic stock reservations, coupon limits and payment amounts are enforced by Laravel, including for direct API callers.
 
-```text
-src/app/                     App Router pages, metadata, error/loading boundaries
-src/app/api/search/route.ts   Read-only, allowlisted search suggestion endpoint
-src/components/              Layout, search, catalog cards, catalog view and media
-src/lib/api.ts               Server-only catalog services / React request deduplication
-src/lib/transport.ts         Typed HTTP transport and error classification
-src/lib/contracts.ts         Zod contracts and inferred TypeScript types
-src/lib/catalog.ts           Price, filter, opaque-link and recommendation utilities
-src/lib/media.ts             Laravel storage URL normalization
-src/app/globals.css          Shared visual tokens and responsive styling + Tailwind
-public/                      Copied existing logo/favicon + decorative hero
-tests/                       Synthetic contract fixtures and real HTTP transport tests
-scripts/smoke.mjs            Read-only production-server smoke checks
-../docs/STOREFRONT-AUDIT.md   Source audit, API matrix, backend gaps and phased plan
+The test-only Razorpay adapter verifies signatures and fetched capture/amount/currency state, deduplicates webhooks and reconciles ambiguous results. Operator-only test refunds require verified provider results. These paths have fake-provider automated coverage; real Razorpay acceptance needs test credentials. Tracking shows actual internal records; no external carrier integration exists. Durable backend throttling is enabled. Commercial shipping/tax/return terms, external transports and operational acceptance remain release requirements; see the full report.
+
+## Isolated transactional tests
+
+Playwright 1.65 and Chromium were already installed. If missing, run `npx.cmd playwright install chromium` once; no connected browser is needed.
+
+From the Laravel root, **once per fresh run label**:
+
+```powershell
+$env:STOREFRONT_TEST_RUN = 'qa-20261113'
+php tests/Storefront/setup.php
+php tests/Storefront/seed.php
 ```
 
-Interactive state currently consists only of debounced search suggestions and image-error fallbacks. TanStack Query, Zustand, React Hook Form, Radix and Motion are deliberately deferred until customer mutations, forms and dialogs need them. Native semantic forms/disclosures handle the foundation without unnecessary client JavaScript.
+Setup uses only `storage/framework/testing/vanthara-checkout-<run>/isolated.sqlite`, overrides config cache/DB_URL and refuses to overwrite an existing DB. The default run label is `v2`; choose a new label to start another sample database without deleting existing data. Set the same label in each test API/helper terminal. Do not seed twice or substitute normal artisan migrate:fresh. No production database reset is permitted.
 
-## Release constraints
+Start the isolated API in a root terminal:
 
-- Local API collections were empty during verification. Populated catalog rendering and customer mutations were not verified against real inventory/accounts. Unit tests use explicitly synthetic fixtures confined to tests.
-- Product IDs are randomized Laravel ciphertext, not stable numeric IDs or slugs. Readable product paths carry an encoded opaque `id` query. Preserve it exactly. Product pages remain noindex and are omitted from sitemap pending a stable backend locator and resolver. Global indexing defaults off (`STOREFRONT_INDEXABLE=false`). Approve copy, finish release QA and address stable URLs before enabling indexing.
-- No customer login, registration, cart/wishlist mutation, address management, checkout, payment, returns or enquiry submission is enabled in this phase. No credentials/payment SDK or token storage is introduced. See the audit for actual endpoint contracts and the required security/business-logic review.
-- Before enabling checkout, obtain approval for the documented backend fixes: quote/totals/address/delivery, stock concurrency, coupon rules, pending-payment lifecycle, ownership/capture checks, idempotency and webhook handling. A frontend Razorpay callback alone is never treated as payment proof.
-- No external deployment was requested or performed. Run Next.js alongside Laravel; do not replace Laravel's `/` admin login. Configure a dedicated storefront domain/process for deployment.
+```powershell
+$env:STOREFRONT_TEST_RUN = 'qa-20261113'
+php -S 127.0.0.1:8138 tests/Storefront/router.php
+```
 
-## Verification record
+In a storefront terminal:
 
-Verified 13 November 2026:
+```powershell
+$env:LARAVEL_API_ORIGIN = 'http://127.0.0.1:8138'
+$env:STOREFRONT_URL = 'http://127.0.0.1:3140'
+$env:STOREFRONT_SESSION_SECRET = 'isolated-test-session-secret-at-least-32-characters'
+$env:STOREFRONT_SANDBOX_TRANSACTIONS = 'true'
+npm.cmd run build
+npm.cmd run start -- --port 3140
+```
 
-- `php artisan route:list --path=api --except-vendor --json`: 56 registered routes. Several resource actions are stubs, as identified in the audit.
-- Local read-only Laravel connectivity: categories, products, subcategories, banners, featured, best sellers, brands and return policies returned HTTP 200 with empty collections. No records were inserted to manufacture inventory.
-- `npm.cmd run typecheck`: passed with strict TypeScript.
-- `npm.cmd test`: 25 passed, 0 failed. Covers encrypted ID URLs, selected/offer/missing/zero prices, randomized-ID recommendation matching, filters/sort, storage URLs, banner destinations/date boundaries, raw review privacy, return-policy contracts/internal-field removal/safe rendering/empty vs failure states, and real local HTTP transport success/error/redirect/invalid responses. Windows sandbox blocked `os.userInfo` in tsx; tests passed using approved process access outside that sandbox.
-- `npm.cmd run build`: passed on Next.js 16.4.6; 18 static pages generated, with dynamic catalog/category/detail/search/sitemap routes. Both Laravel Vite lockfile and standalone storefront lockfile are retained; tracing/Turbopack roots are explicitly scoped to storefront.
-- `npm.cmd run smoke`: 16 passed on the production server, including main pages, offer collection, live return-policy page, explicit phase-2 states, sitemap, robots, same-origin search, the local WebP hero, development noindex, response headers and HTML-escaped search input.
-- Local API outage: after stopping only the task-owned Laravel process, an uncached search request returned HTTP 503; an uncached catalog page displayed its unavailable state and did not expose SQL errors. Laravel was restarted for final build verification. No customer or transaction calls were made.
-- Dependency installation reported zero known vulnerabilities at installation time.
+In another storefront terminal:
 
-Browser visual QA requires a connected browser; no browser surface was available in this session (browser inventory was empty). CSS has mobile breakpoints and accessible controls but has not been visually signed off on devices. Populated catalog/details, real device responsiveness and authenticated/payment flows remain unverified. Task-owned preview processes were stopped after verification; use the commands above to launch again.
+```powershell
+$env:STOREFRONT_TEST_RUN = 'qa-20261113'
+npm.cmd run test:transactions
+$env:PLAYWRIGHT_BASE_URL = 'http://127.0.0.1:3140'
+npm.cmd run test:browser -- --grep 'browse category|filters update|keyboard skip' --workers=1
+```
 
-## Hero provenance
+The suite creates fake customers/sample orders only. It tests invalid credentials/coupons, owned resources, quote recovery, forged totals, reservation cancellation, returns, persistent login throttling, cross-origin rejection and production order/payment rejection using a second task-owned Next process on 3141. It also explicitly mocks pending/failed/cancelled SDK states without claiming a provider payment. Ports 8138, 3140 and 3141 must be free before their corresponding servers start. Reports and twelve mobile/desktop screenshots are in `artifacts/transactions/`. Repeated orders consume sample stock; choose a fresh run label when needed. Existing and new Laravel tests: `php tests/Storefront/run-tests.php` from the root (feature tests use fresh in-memory SQLite).
 
-`public/hero.webp` is decorative editorial artwork generated with the built-in imagegen tool, then resized/converted to WebP (1400px, about 129KB) using Sharp. It is not a product listing. Existing Laravel product/category media is never replaced by generated inventory images.
+The sandbox flag also requires a loopback API, exact test-harness identity and the backend's isolated-database gate; it cannot enable production checkout. Optional gateway acceptance requires `STOREFRONT_RAZORPAY_TEST_KEY` (`rzp_test_` only) and `STOREFRONT_RAZORPAY_TEST_SECRET` in the **test API** process, plus a separate `STOREFRONT_RAZORPAY_WEBHOOK_SECRET`. The backend returns the public test key; the secret never belongs in Next. Keep credentials unset for the default unavailable-payment browser test, which expects zero gateway calls. Real provider success/failure/cancellation/webhook/refund acceptance remains unverified. Never deploy the test harness publicly.
 
-Final generation prompt:
+Isolated operational wrappers and guarded MySQL concurrency-test setup are documented in the [implementation report](../docs/STOREFRONT-CHECKOUT-IMPLEMENTATION.md). All 53 migrations passed on fresh isolated SQLite and MySQL. Do not point these helpers at the normal Laragon database.
 
-> Use case: photorealistic-natural. Asset type: decorative editorial homepage hero for Vantara, a premium everyday shopping storefront with a green leaf logo and plum accents. Create a sophisticated photographic still life: a single lush green branch in a sculptural warm ivory ceramic vase, a folded unbleached linen cloth and a curved plum-colored sculptural object on a pale warm limestone pedestal. Sunlit cream studio backdrop, soft diagonal botanical shadows, tactile natural materials, restrained elegant composition, bright natural morning light. Landscape 3:2 composition, objects grouped center and right with breathing room. No products for sale, no packaging, no food, no labels, no branding, no text or watermarks. This image is decorative atmosphere, not a catalog product photo.
+Stop task-owned processes after testing. Clear temporary shell overrides and rebuild with normal origins before using/packaging `.next`: public prerendering and image configuration depend on the API selected at build time. Do not ship a sample-data build.
+
+## Preserved browsing and structure
+
+`src/app/` contains public/customer routes and allowlisted search/customer API handlers. `src/components/` contains shared browsing and customer UI; `src/lib/` separates public catalog contracts from private sessions/customer adapters. Tests and scripts contain Chromium, unit, HTTP and review-artifact tooling.
+
+Public browsing retains real backend products/categories/offers, opaque encrypted links, keyboard search, filters/pagination, media fallbacks, actual return policies and metadata. Filters operate over the loaded full API response; backend pagination is needed for scale. Stable product locators remain missing, so product pages stay noindex and global indexing defaults off. Business information pages remain provisional. No deployment was performed.
+
+The existing decorative `public/hero.webp` was generated in the earlier visual phase (1400px WebP, about 129KB): ivory vase, leafy branch, linen and plum sculpture on warm limestone. It is not product imagery. Authentic Laravel product media was preserved; isolated test-logo images never replace production inventory.

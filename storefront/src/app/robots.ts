@@ -1,3 +1,3 @@
 import type { MetadataRoute } from 'next';
 import { indexable, siteOrigin } from '@/lib/config';
-export default function robots(): MetadataRoute.Robots { return { rules: indexable ? { userAgent: '*', allow: '/', disallow: ['/api/', '/account', '/cart', '/wishlist', '/products/'] } : { userAgent: '*', disallow: '/' }, ...(indexable ? { sitemap: `${siteOrigin}/sitemap.xml` } : {}) }; }
+export default function robots(): MetadataRoute.Robots { return { rules: indexable ? { userAgent: '*', allow: '/', disallow: ['/api/', '/account', '/cart', '/wishlist', '/checkout', '/orders', '/login', '/register', '/products/'] } : { userAgent: '*', disallow: '/' }, ...(indexable ? { sitemap: `${siteOrigin}/sitemap.xml` } : {}) }; }

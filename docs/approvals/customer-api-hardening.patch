@@ -1,0 +1,190 @@
+diff --git a/app/Http/Controllers/Api/AuthController.php b/app/Http/Controllers/Api/AuthController.php
+index bc4edaf..5b4ff4d 100644
+--- a/app/Http/Controllers/Api/AuthController.php
++++ b/app/Http/Controllers/Api/AuthController.php
+@@ -32,6 +32,10 @@ public function login(Request $request)
+             ], 401);
+         }
+ 
++        if ((int) $user->status !== 1) {
++            return response()->json(['message' => 'Account is inactive'], 403);
++        }
++
+         $user->update(['last_seen_at' => now()]);
+         // Create Sanctum token
+         $user->tokens()->delete();
+diff --git a/app/Http/Controllers/Api/DeliveryAddressController.php b/app/Http/Controllers/Api/DeliveryAddressController.php
+index 2b875e7..2605833 100644
+--- a/app/Http/Controllers/Api/DeliveryAddressController.php
++++ b/app/Http/Controllers/Api/DeliveryAddressController.php
+@@ -34,14 +34,14 @@ public function store(DeliverAddressRequest $request)
+         $data = [
+             'customer_id' => Auth::user()->customer_id,
+             'phone' => $request->validated()['phone'],
+-            'email' => $request->validated()['email'],
++            'email' => ($request->validated()['email'] ?? null),
+             'address_line1' => $request->validated()['address_line1'],
+-            'address_line2' => $request->validated()['address_line2'],
++            'address_line2' => ($request->validated()['address_line2'] ?? null),
+             'city' => $request->validated()['city'],
+             'state' => $request->validated()['state'],
+-            'country' => $request->validated()['country'],
++            'country' => ($request->validated()['country'] ?? 'India'),
+             'postal_code' => $request->validated()['postal_code'],
+-            'is_default' => $request->validated()['is_default'],
++            'is_default' => ($request->validated()['is_default'] ?? false),
+         ];
+ 
+         $addressQuery = DeliveryAddress::where('customer_id', Auth::user()->customer_id);
+@@ -82,25 +82,28 @@ public function edit(string $id)
+      */
+     public function update(DeliverAddressRequest $request, string $id)
+     {
++        if (!DeliveryAddress::where('customer_id', Auth::user()->customer_id)->where('address_id', $id)->exists()) {
++            return response()->json(['message' => 'Address not found'], 404);
++        }
+         $data = [
+             'phone' => $request->validated()['phone'],
+-            'email' => $request->validated()['email'],
++            'email' => ($request->validated()['email'] ?? null),
+             'address_line1' => $request->validated()['address_line1'],
+-            'address_line2' => $request->validated()['address_line2'],
++            'address_line2' => ($request->validated()['address_line2'] ?? null),
+             'city' => $request->validated()['city'],
+             'state' => $request->validated()['state'],
+-            'country' => $request->validated()['country'],
++            'country' => ($request->validated()['country'] ?? 'India'),
+             'postal_code' => $request->validated()['postal_code'],
+-            'is_default' => $request->validated()['is_default'],
++            'is_default' => ($request->validated()['is_default'] ?? false),
+         ];
+ 
+-        if ($request->validated()['is_default']) {
++        if (($request->validated()['is_default'] ?? false)) {
+             DeliveryAddress::where('customer_id', Auth::user()->customer_id)
+                 ->where('is_default', 1)
+                 ->update(['is_default' => 0]);
+         }
+ 
+-        DeliveryAddress::where('address_id', $id)->update($data);
++        DeliveryAddress::where('customer_id', Auth::user()->customer_id)->where('address_id', $id)->update($data);
+ 
+         return response()->json([
+             'status' => 'success',
+diff --git a/app/Http/Controllers/Api/CartController.php b/app/Http/Controllers/Api/CartController.php
+index e28a5d8..4bd0381 100644
+--- a/app/Http/Controllers/Api/CartController.php
++++ b/app/Http/Controllers/Api/CartController.php
+@@ -63,6 +63,9 @@ public function store(Request $request)
+         ]);
+ 
+         $cartItem->quantity = ($cartItem->exists ? $cartItem->quantity : 0) + $request->quantity;
++        if ((int) $product->status !== 1 || $cartItem->quantity > $product->stock) {
++            return response()->json(['message' => 'Insufficient available stock'], 422);
++        }
+         $cartItem->price    = $product->default_price_value;
+         $cartItem->options  = $request->options ?? null;
+         $cartItem->save();
+@@ -106,7 +109,8 @@ public function change_count(Request $request)
+     {
+         $user = Auth::user();
+ 
+-        $count = $request->count ?? 1;
++        $request->validate(['count' => 'required|integer|min:1']);
++        $count = (int) $request->count;
+         $product_id = decrypt($request->product_id);
+ 
+         $request->merge(['product_id' => $product_id]);
+diff --git a/app/Http/Controllers/Api/PaymentController.php b/app/Http/Controllers/Api/PaymentController.php
+index 4a940a5..3d13391 100644
+--- a/app/Http/Controllers/Api/PaymentController.php
++++ b/app/Http/Controllers/Api/PaymentController.php
+@@ -142,6 +142,17 @@ public function success(Request $request)
+                 return back()->with('error', 'Invalid payment record.');
+             }
+ 
++            if ((int) $payment->user_id !== (int) Auth::user()->customer_id) {
++                return response()->json(['message' => 'Payment not found'], 404);
++            }
++            $providerPayment = $api->payment->fetch($request->razorpay_payment_id);
++            if ($providerPayment['order_id'] !== $payment->razorpay_order_id
++                || $providerPayment['status'] !== 'captured'
++                || $providerPayment['currency'] !== 'INR'
++                || (int) $providerPayment['amount'] !== (int) round($payment->amount * 100)) {
++                return response()->json(['message' => 'Payment capture has not been verified'], 409);
++            }
++
+             $payment->update([
+                 'razorpay_payment_id' => $request->razorpay_payment_id,
+                 'razorpay_signature' => $request->razorpay_signature,
+@@ -181,6 +192,13 @@ public function failed(Request $request)
+             return back()->with('error', 'Payment record not found.');
+         }
+ 
++        if ((int) $payment->user_id !== (int) Auth::user()->customer_id) {
++            return response()->json(['message' => 'Payment not found'], 404);
++        }
++        if ($payment->status === 'paid') {
++            return response()->json(['message' => 'A paid payment cannot be marked failed'], 409);
++        }
++
+         $payment->update([
+             'status' => 'failed',
+             'razorpay_payment_id' => $request->razorpay_payment_id ?? $payment->razorpay_payment_id,
+diff --git a/app/Http/Controllers/Api/SalesReturnController.php b/app/Http/Controllers/Api/SalesReturnController.php
+index a27e5cd..d307ffa 100644
+--- a/app/Http/Controllers/Api/SalesReturnController.php
++++ b/app/Http/Controllers/Api/SalesReturnController.php
+@@ -6,6 +6,7 @@
+ use App\Http\Controllers\Controller;
+ use Illuminate\Http\Request;
+ use App\Models\OrderItem;
++use App\Models\Order;
+ use App\Models\Product;
+ use App\Models\SalesReturn;
+ use App\Models\SalesReturnItems;
+@@ -42,7 +43,7 @@ public function store(Request $request)
+             'order_id' => 'required|exists:orders,order_id',
+             'items' => 'required|array|min:1',
+             'items.*.product_id' => 'required|exists:products,product_id',
+-            'items.*.quantity' => 'required|numeric|min:1',
++            'items.*.quantity' => 'required|integer|min:1',
+             'items.*.price' => 'required|numeric|min:0',
+             'remarks' => 'nullable|string',
+             'return_type' => 'nullable|in:refund,replacement',
+@@ -62,6 +63,22 @@ public function store(Request $request)
+ 
+         $customer = Auth::user(); // customer authenticated via API
+ 
++        $order = Order::where('order_id', $data['order_id'])->where('customer_id', $customer->customer_id)->first();
++        if (!$order || $order->status !== 'delivered') {
++            return response()->json(['message' => 'Delivered order not found'], 404);
++        }
++        foreach ($data['items'] as &$line) {
++            $sold = OrderItem::where('order_id', $order->order_id)->where('product_id', $line['product_id'])->first();
++            if (!$sold) return response()->json(['message' => 'Order item not found'], 404);
++            $requested = SalesReturnItems::where('order_item_id', $sold->order_item_id)
++                ->whereHas('salesReturn', fn ($query) => $query->where('status', '!=', 'rejected'))->sum('quantity');
++            if ($line['quantity'] + $requested > $sold->quantity) {
++                return response()->json(['message' => 'Return quantity exceeds the remaining purchased quantity'], 422);
++            }
++            $line['price'] = $sold->price;
++        }
++        unset($line);
++
+         $return = SalesReturn::create([
+             'order_id' => $data['order_id'],
+             'customer_id' => $customer->customer_id,
+diff --git a/app/Http/Resources/OrderHistoryResource.php b/app/Http/Resources/OrderHistoryResource.php
+index 127a7ca..04a3832 100644
+--- a/app/Http/Resources/OrderHistoryResource.php
++++ b/app/Http/Resources/OrderHistoryResource.php
+@@ -40,7 +40,7 @@ public function toArray(Request $request): array
+                     'total' => $item->total,
+                     'amount_wo_tax' => $item->amount_wo_tax,
+                     'primary_image' => $item->product?->primaryImage?->image_path ?? null,
+-                    'is_returned' => $item->returned?->exists() ? true : false,
++                    'is_returned' => $item->returned !== null,
+                     'return_status' => $item->returned?->salesReturn?->status
+                         ? Str::headline($item->returned->salesReturn->status)
+                         : "",

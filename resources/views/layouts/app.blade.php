@@ -400,12 +400,20 @@
 
     {{-- // Enable pusher --}}
     <script>
-        var pusher = new Pusher('27167a204422aba778bb', {
-            cluster: 'ap2'
+        const adminPusherKey = @json(config('broadcasting.connections.pusher.key'));
+        if (adminPusherKey) {
+        var pusher = new Pusher(adminPusherKey, {
+            cluster: @json(config('broadcasting.connections.pusher.options.cluster')),
+            forceTLS: true,
+            channelAuthorization: {
+                endpoint: @json(url('/broadcasting/auth')),
+                transport: 'ajax',
+                headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+            }
         });
 
         //Sales Order Notification
-        var salesChannel = pusher.subscribe('my-channel');
+        var salesChannel = pusher.subscribe('private-my-channel');
         salesChannel.bind('my-event', function (data) {
             // alert(JSON.stringify(data));
             // console.log(data);
@@ -416,8 +424,8 @@
                     console.log('Audio play was prevented:', error);
                 });
             }
-            $('#customer_name').html(data.cus_name);
-            $('#order_amount').html(data.total_amount);
+            $('#customer_name').text(data.cus_name);
+            $('#order_amount').text(data.total_amount);
             $('#orderToast').toast({
                 autohide: false
             }).toast('show');
@@ -425,7 +433,7 @@
         });
 
         // /Sales Return Notification
-        var returnChannel = pusher.subscribe('sales-return');
+        var returnChannel = pusher.subscribe('private-sales-return');
         returnChannel.bind('sales-return-event', function (data) {
             // alert(JSON.stringify(data));
             // console.log(data);
@@ -436,12 +444,13 @@
                     console.log('Audio play was prevented:', error);
                 });
             }
-            $('#return_customer_name').html(data.cus_name);
-            $('#return_order_amount').html(data.return.total_amount);
+            $('#return_customer_name').text(data.cus_name);
+            $('#return_order_amount').text(data.return.total_amount);
             $('#returnToast').toast({
                 autohide: false
             }).toast('show');
         });
+        }
     </script>
     @stack('page-scripts')
 </body>

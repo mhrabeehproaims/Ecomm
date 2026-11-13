@@ -11,7 +11,6 @@ use App\Models\Order;
 use App\Models\OrderStatusLog;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
@@ -47,7 +46,7 @@ class OrderController extends Controller
                 'orders.*',
                 'customers.first_name',
                 'customers.last_name',
-                'customers.phone'
+                'customers.phone',
             ])
                 ->leftJoin('customers', 'customers.customer_id', '=', 'orders.customer_id')
                 // Apply status filter from AJAX request
@@ -64,29 +63,29 @@ class OrderController extends Controller
 
             return DataTables::of($orders)
                 ->addIndexColumn()
-                ->editColumn('order_id', fn($row) => '#VAN' . str_pad($row->order_id, 7, '0', STR_PAD_LEFT))
+                ->editColumn('order_id', fn ($row) => '#VAN'.str_pad($row->order_id, 7, '0', STR_PAD_LEFT))
                 ->editColumn('ref_order', function ($row) {
                     $icon = $row->coupon_discount
-                        ? '<i class="bx bxs-discount fs-5 p-0 m-0 ms-1"></i><br>₹' . $row->coupon_discount
+                        ? '<i class="bx bxs-discount fs-5 p-0 m-0 ms-1"></i><br>₹'.$row->coupon_discount
                         : '';
 
                     if ($row->reference_order_id) {
                         return '<span class="badge bg-warning p-1 text-dark fw-bold d-inline-block">
-                    #VAN' . str_pad($row->reference_order_id, 7, '0', STR_PAD_LEFT) . '<br>' . $icon . '
+                    #VAN'.str_pad($row->reference_order_id, 7, '0', STR_PAD_LEFT).'<br>'.$icon.'
                 </span>';
                     }
 
                     return '<span class="badge bg-success p-1 text-white d-inline-block">
-                New Order<br>' . $icon . '
+                New Order<br>'.$icon.'
             </span>';
                 })
                 ->rawColumns(['ref_order'])
-                ->addColumn('date', fn($row) => $row->created_at?->format('d-m-Y h:i A'))
-                ->addColumn('payment_status', fn($row) => $row->payment_status ?? 'N/A')
-                ->addColumn('customer_name', fn($row) => ucwords($row->customer?->first_name) . ' ' . ucwords($row->customer?->last_name) ?? 'N/A')
-                ->addColumn('customer_contact', fn($row) => $row->customer?->phone ?? 'N/A')
-                ->addColumn('delivery_loc', fn($row) => $row->customer?->defaultDeliveryAddress->city ?? 'N/A')
-                ->addColumn('created_at', fn($row) => $row->customer?->created_at ?? 'N/A')
+                ->addColumn('date', fn ($row) => $row->created_at?->format('d-m-Y h:i A'))
+                ->addColumn('payment_status', fn ($row) => $row->payment_status ?? 'N/A')
+                ->addColumn('customer_name', fn ($row) => ucwords($row->customer?->first_name).' '.ucwords($row->customer?->last_name) ?? 'N/A')
+                ->addColumn('customer_contact', fn ($row) => $row->customer?->phone ?? 'N/A')
+                ->addColumn('delivery_loc', fn ($row) => $row->customer?->defaultDeliveryAddress->city ?? 'N/A')
+                ->addColumn('created_at', fn ($row) => $row->customer?->created_at ?? 'N/A')
                 ->addColumn('order_status', function ($row) {
                     $status = strtolower($row->status ?? 'ordered');
 
@@ -103,37 +102,37 @@ class OrderController extends Controller
 
                     $colorClass = $colors[$status] ?? 'btn-light';
 
-                    return '<button class="btn btn-sm statusBtn fw-bold ' . $colorClass . '"
-                    data-curstatus="' . e($row->status) . '"
-                    data-id="' . e($row->order_id) . '" '
-                        . ($row->status == 'delivered' ? 'disabled' : '') . '>'
-                        . ucfirst($status)
-                        . '</button>';
+                    return '<button class="btn btn-sm statusBtn fw-bold '.$colorClass.'"
+                    data-curstatus="'.e($row->status).'"
+                    data-id="'.e($row->order_id).'" '
+                        .($row->status == 'delivered' ? 'disabled' : '').'>'
+                        .ucfirst($status)
+                        .'</button>';
                 })
                 ->addColumn('action', function ($row) {
                     $url = route('order.show', encrypt($row->order_id));
 
-                    $orderBtn = '<a href="' . $url . '" class="btn btn-light btn-sm me-1 mb-1">
+                    $orderBtn = '<a href="'.$url.'" class="btn btn-light btn-sm me-1 mb-1">
                     <i class="bx bx-show"></i> Order Details
                  </a>';
 
                     $downloadBtn = $row->invoice
-                        ? '<a href="' . asset('storage/Invoices/' . $row->invoice->invoice_number . '.pdf') . '" 
-                        download="' . $row->invoice->invoice_number . '.pdf" 
+                        ? '<a href="'.asset('storage/Invoices/'.$row->invoice->invoice_number.'.pdf').'" 
+                        download="'.$row->invoice->invoice_number.'.pdf" 
                         class="btn btn-secondary btn-sm me-1 mb-1">
                         <i class="bx bx-download"></i> Invoice
                     </a>'
                         : '';
 
                     $delSlipBtn = $row->invoice
-                        ? '<a href="' . asset('storage/PackingSlips/' . $row->invoice->invoice_number . '_packing_slip.pdf') . '" 
-                        download="' . $row->invoice->invoice_number . '_packing_slip.pdf" 
+                        ? '<a href="'.asset('storage/PackingSlips/'.$row->invoice->invoice_number.'_packing_slip.pdf').'" 
+                        download="'.$row->invoice->invoice_number.'_packing_slip.pdf" 
                         class="btn btn-success btn-sm mb-1">
                         <i class="bx bx-download"></i> Slip
                     </a>'
                         : '';
 
-                    return $orderBtn . $downloadBtn . $delSlipBtn;
+                    return $orderBtn.$downloadBtn.$delSlipBtn;
                 })
                 ->rawColumns(['order_status', 'action', 'ref_order'])
                 ->make(true);
@@ -144,7 +143,7 @@ class OrderController extends Controller
             'today_order_count' => $today_order_count,
             'today_order_total' => $today_order_total,
             'today_delivered_count' => $today_delivered_count,
-            'search_status' => $search_status  // Pass selected status to view
+            'search_status' => $search_status,  // Pass selected status to view
         ]);
     }
 
@@ -168,10 +167,27 @@ class OrderController extends Controller
             'unique_tracking_id' => 'nullable|required_if:status,despatched|string|max:255',
             'approx_delivery_date' => 'nullable|required_if:status,despatched|date',
             'selectAgent' => 'nullable|required_if:status,despatched|exists:delivery_partners,partner_id',
-            'approx_delivery_charge' => 'nullable|numeric'
+            'approx_delivery_charge' => 'nullable|numeric',
         ]);
 
         $status = $request->status;
+        if (\Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts')
+            && ($secure = \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $id)->first())) {
+            $record = \Illuminate\Support\Facades\DB::table('orders')->where('order_id', $id)->first();
+            $quotedShipping = json_decode($secure->breakdown, true)['shipping_minor'];
+            if ($request->filled('approx_delivery_charge') && \App\Services\Storefront\Money::minor($request->input('approx_delivery_charge')) !== $quotedShipping) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['approx_delivery_charge' => 'The accepted checkout delivery charge cannot be changed during fulfillment.']);
+            }
+            $request->merge(['approx_delivery_charge' => \App\Services\Storefront\Money::decimal($quotedShipping)]);
+            if ($status === 'rejected' && $secure->state === 'reserved') {
+                app(\App\Services\Storefront\CheckoutService::class)->release($record->customer_id, (int) $id);
+
+                return response()->json(['status' => 'success', 'status2' => $status]);
+            }
+            if (in_array($status, ['confirmed', 'processing', 'despatched', 'ontransist', 'delivered'])) {
+                abort_unless($secure->state === 'committed' && ($record->payment_method !== 'online' || $record->payment_status === 'paid'), 409, 'Verified capture and a committed reservation are required before fulfillment.');
+            }
+        }
         $order = Order::findOrFail($id);
         $order->update(['status' => $status]);
 
@@ -180,13 +196,13 @@ class OrderController extends Controller
                 'delivery_tracking_id' => $request->input('unique_tracking_id'),
                 'delivery_date' => $request->input('approx_delivery_date'),
                 'delivery_agent_id' => $request->input('selectAgent'),
-                'delivery_charge' => $request->input('approx_delivery_charge') ?? 0
+                'delivery_charge' => $request->input('approx_delivery_charge') ?? 0,
             ];
             $order->update($deliverAgent);
 
             $invoicePath = $this->generateInvoice($order);
             if ($order->customer?->email) {
-                $invoicePath = asset('storage/' . $invoicePath);
+                $invoicePath = asset('storage/'.$invoicePath);
                 event(new orderShippedEvent($order, $invoicePath));
             }
 
@@ -227,14 +243,14 @@ class OrderController extends Controller
     {
         // If invoice already exists, reuse the old PDF path
         if ($order->invoice) {
-            return 'Invoices/' . $order->invoice->invoice_number . '.pdf';
+            return 'Invoices/'.$order->invoice->invoice_number.'.pdf';
         }
 
         // ✅ Generate a new invoice number
-        $invoiceNumber = 'INV' . str_pad($order->order_id, 7, '0', STR_PAD_LEFT);
+        $invoiceNumber = 'INV'.str_pad($order->order_id, 7, '0', STR_PAD_LEFT);
 
         // Create and save the invoice record
-        $invoice = new Invoice();
+        $invoice = new Invoice;
         $invoice->order_id = $order->order_id;
         $invoice->invoice_number = $invoiceNumber;
         $invoice->invoice_date = now();
@@ -243,6 +259,7 @@ class OrderController extends Controller
 
         // ✅ Generate PDF and return the path
         $this->generatePackingSlip($invoice);
+
         return $this->generateInvoicePDF($invoice);
     }
 
@@ -252,7 +269,7 @@ class OrderController extends Controller
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
 
         // Create the file name
-        $fileName = 'Invoices/' . $invoice->invoice_number . '.pdf';
+        $fileName = 'Invoices/'.$invoice->invoice_number.'.pdf';
 
         // Store the PDF into the 'public' disk
         Storage::disk('public')->put($fileName, $pdf->output());
@@ -266,7 +283,7 @@ class OrderController extends Controller
         $pdf = Pdf::loadView('invoices.packing_slip', compact('invoice'))
             ->setPaper('A5', 'portrait');  // A5 fits well on boxes
 
-        $fileName = 'PackingSlips/' . $invoice->invoice_number . '_packing_slip.pdf';
+        $fileName = 'PackingSlips/'.$invoice->invoice_number.'_packing_slip.pdf';
 
         Storage::disk('public')->put($fileName, $pdf->output());
 
@@ -309,6 +326,11 @@ class OrderController extends Controller
 
         $order = Order::find($data['order_id']);
 
+        if ($data['delivery_status'] === 'delivered' && \Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts')
+            && ($secure = \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $order->order_id)->first())) {
+            abort_unless($secure->state === 'committed' && ($order->payment_method !== 'online' || $order->payment_status === 'paid'), 409, 'Verified capture and a committed reservation are required before delivery.');
+        }
+
         if (in_array($data['delivery_status'], ['call', 'called', 'follow-up', 'delivered'])) {
             DeliveryFollowup::create([
                 'order_id' => $data['order_id'],
@@ -318,7 +340,7 @@ class OrderController extends Controller
 
             if ($data['delivery_status'] === 'delivered') {
                 $order->update(['status' => $data['delivery_status']]);
-                if (!empty($data['email'])) {
+                if (! empty($data['email'])) {
                     Mail::to($data['email'])->send(new OrderDeliveredMail($order));
                 }
             }
@@ -326,17 +348,18 @@ class OrderController extends Controller
 
         $log_data = [
             'order_id' => $data['order_id'],
-            'status' => $data['delivery_status'],
+            'status' => $data['delivery_status'] === 'ontransist' ? 'ontransit' : $data['delivery_status'],
             'changed_by' => 1,  // Admin
             'remarks' => '',
-            'changed_at' => date('Y-m-d h:i:s')
+            'changed_at' => date('Y-m-d h:i:s'),
         ];
-        if (!in_array($data['delivery_status'], ['call', 'called', 'follow-up'])) {
+        if (! in_array($data['delivery_status'], ['call', 'called', 'follow-up'])) {
             OrderStatusLog::create($log_data);
         }
+
         return response()->json([
             'success' => true,
-            'status' => ucfirst($data['delivery_status'])
+            'status' => ucfirst($data['delivery_status']),
         ]);
     }
 
@@ -346,12 +369,12 @@ class OrderController extends Controller
         if ($followups) {
             $data = [
                 'status' => 'success',
-                'data' => $followups
+                'data' => $followups,
             ];
         } else {
             $data = [
                 'status' => 'failed',
-                'data' => ''
+                'data' => '',
             ];
         }
 

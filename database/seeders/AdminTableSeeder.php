@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -17,7 +16,7 @@ class AdminTableSeeder extends Seeder
         $data = [
             'name' => 'Admin',
             'email' => 'admin@vantara.com',
-            'password' => Hash::make('12345')
+            'password' => Hash::make('12345'),
         ];
         User::create($data);
     }

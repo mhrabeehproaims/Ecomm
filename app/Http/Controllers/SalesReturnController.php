@@ -12,7 +12,6 @@ use App\Models\SalesReturn;
 use App\Models\SalesReturnItems;
 use App\Models\StockManagement;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -24,6 +23,7 @@ class SalesReturnController extends Controller
     public function index()
     {
         $returns = SalesReturn::with('customer', 'items', 'reforder')->withCount('items')->latest()->paginate(10);
+
         return view('SalesReturn.returns', compact('returns'));
         // return response()->json($returns);
     }
@@ -48,6 +48,7 @@ class SalesReturnController extends Controller
     {
         $id = decrypt($id);
         $return_details = SalesReturn::where('return_id', $id)->with('items')->first();
+
         return view('SalesReturn.return-details', compact('return_details'));
     }
 
@@ -166,7 +167,6 @@ class SalesReturnController extends Controller
     //                     'remarks'    => 'Status updated by admin',
     //                 ]);
 
-
     //                 DB::commit();
 
     //                 // Send mail or notification
@@ -190,8 +190,16 @@ class SalesReturnController extends Controller
 
     public function update_status($id, Request $request)
     {
+        // Preserve legacy returns; new storefront requests use strict, idempotent transitions.
+        if (\Illuminate\Support\Facades\Schema::hasTable('storefront_return_requests')
+            && DB::table('storefront_return_requests')->where('return_id', $id)->exists()) {
+            $data = $request->validate(['status' => 'required|in:requested,accepted,rejected,picked_up,collected,refunded,replaced']);
+            app(\App\Services\Storefront\ReturnService::class)->transition((int) $id, $data['status']);
+
+            return response()->json(['status' => 'success', 'status2' => $data['status'], 'message' => 'Return status updated.']);
+        }
         $request->validate([
-            'status' => 'required|in:requested,accepted,rejected,picked_up,collected,refunded,replaced'
+            'status' => 'required|in:requested,accepted,rejected,picked_up,collected,refunded,replaced',
         ]);
 
         $status = $request->status;
@@ -204,48 +212,48 @@ class SalesReturnController extends Controller
         try {
             $originalOrder = $salesReturn->order;
             $user = $originalOrder->customer;
-            if ($status === "accepted") {
+            if ($status === 'accepted') {
                 $item = SalesReturnItems::where('sales_return_id', $id)->first();
                 if (filled($user->email)) {
                     Mail::to($user->email)->send(new ReturnAcceptMail($user, $item));
                 }
                 OrderStatusLog::create([
-                    'order_id'   => $originalOrder->order_id,
-                    'status'     => 'accepted',
-                    'changed_by' =>  1,
-                    'remarks'    => 'Return Accepted',
+                    'order_id' => $originalOrder->order_id,
+                    'status' => 'accepted',
+                    'changed_by' => 1,
+                    'remarks' => 'Return Accepted',
                 ]);
-            } elseif ($status === "refunded") {
+            } elseif ($status === 'refunded') {
                 foreach ($salesReturn->items as $item) {
                     $product = $item->product;
 
                     $product->increment('stock', $item->quantity);
 
                     StockManagement::create([
-                        'product_id'   => $product->product_id,
-                        'quantity'     => $item->quantity,
+                        'product_id' => $product->product_id,
+                        'quantity' => $item->quantity,
                         'stock_status' => 'refunded',
-                        'notes'        => 'Refunded product returned from sales return ID: ' . $salesReturn->return_id,
+                        'notes' => 'Refunded product returned from sales return ID: '.$salesReturn->return_id,
                     ]);
                 }
 
                 OrderStatusLog::create([
-                    'order_id'   => $originalOrder->order_id,
-                    'status'     => 'refunded',
-                    'changed_by' =>  1,
-                    'remarks'    => 'Amount Refunded',
+                    'order_id' => $originalOrder->order_id,
+                    'status' => 'refunded',
+                    'changed_by' => 1,
+                    'remarks' => 'Amount Refunded',
                 ]);
-            } elseif ($status === "replaced") {
+            } elseif ($status === 'replaced') {
 
                 $newOrder = Order::create([
-                    'customer_id'        => $user->customer_id,
+                    'customer_id' => $user->customer_id,
                     'reference_order_id' => $originalOrder->order_id,
-                    'total_tax_amount'   => 0,
-                    'discount'           => 0,
-                    'total_amount'       => 0,
-                    'status'             => 'reissued',
-                    'payment_status'     => 'unpaid',
-                    'paid_at'            => now(),
+                    'total_tax_amount' => 0,
+                    'discount' => 0,
+                    'total_amount' => 0,
+                    'status' => 'reissued',
+                    'payment_status' => 'unpaid',
+                    'paid_at' => now(),
                 ]);
 
                 foreach ($salesReturn->items as $item) {
@@ -262,19 +270,19 @@ class SalesReturnController extends Controller
                     $base_price = $tax_value['base_price'] ?? 0;
 
                     OrderItem::create([
-                        'order_id'      => $newOrder->order_id,
-                        'product_id'    => $product->product_id,
-                        'quantity'      => $item->quantity,
-                        'price'         => $price,
-                        'total'         => $itemTotal,
-                        'tax_percent'   => $taxPercent,
-                        'cgst_percent'  => $taxSchedule->cgst ?? 0,
-                        'sgst_percent'  => $taxSchedule->sgst ?? 0,
-                        'igst_percent'  => $taxSchedule->igst ?? 0,
+                        'order_id' => $newOrder->order_id,
+                        'product_id' => $product->product_id,
+                        'quantity' => $item->quantity,
+                        'price' => $price,
+                        'total' => $itemTotal,
+                        'tax_percent' => $taxPercent,
+                        'cgst_percent' => $taxSchedule->cgst ?? 0,
+                        'sgst_percent' => $taxSchedule->sgst ?? 0,
+                        'igst_percent' => $taxSchedule->igst ?? 0,
                         'amount_wo_tax' => $base_price,
-                        'cgst_amount'   => $tax_amount / 2,
-                        'sgst_amount'   => $tax_amount / 2,
-                        'igst_amount'   => $tax_amount,
+                        'cgst_amount' => $tax_amount / 2,
+                        'sgst_amount' => $tax_amount / 2,
+                        'igst_amount' => $tax_amount,
                     ]);
 
                     // 🔻 Stock decrease only for replaced items
@@ -296,10 +304,10 @@ class SalesReturnController extends Controller
                 $salesReturn->update(['reissued_order_id' => $newOrder->order_id]);
 
                 OrderStatusLog::create([
-                    'order_id'   => $newOrder->order_id,
-                    'status'     => 'reissued',
-                    'changed_by' =>  1,
-                    'remarks'    => 'Reissued items for sales return #' . $salesReturn->return_id,
+                    'order_id' => $newOrder->order_id,
+                    'status' => 'reissued',
+                    'changed_by' => 1,
+                    'remarks' => 'Reissued items for sales return #'.$salesReturn->return_id,
                 ]);
 
                 if (filled($user->email)) {
@@ -308,10 +316,10 @@ class SalesReturnController extends Controller
                 }
             } else {
                 OrderStatusLog::create([
-                    'order_id'   => $originalOrder->order_id,
-                    'status'     => 'delivered',
-                    'changed_by' =>  1,
-                    'remarks'    => '',
+                    'order_id' => $originalOrder->order_id,
+                    'status' => 'delivered',
+                    'changed_by' => 1,
+                    'remarks' => '',
                 ]);
             }
 
@@ -323,9 +331,10 @@ class SalesReturnController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Action failed: ' . $e->getMessage(),
+                'message' => 'Action failed: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -336,13 +345,13 @@ class SalesReturnController extends Controller
         // $base = ($total_amount*100)/(100+$tax_percentage);
         // $tax = $total_amount - $base;
 
-        //Method: 2
+        // Method: 2
         $base = $total_amount / (1 + ($tax_percentage / 100));
         $tax = $total_amount - $base;
 
         return [
-            "base_price" => round($base, 2),
-            "tax_amount" => round($tax, 2),
+            'base_price' => round($base, 2),
+            'tax_amount' => round($tax, 2),
         ];
     }
 }

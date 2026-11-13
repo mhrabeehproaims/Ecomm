@@ -1,5 +1,7 @@
 # Vantara storefront audit and implementation plan
 
+> Historical foundation audit. See [current customer integration and isolated tests](STOREFRONT-TRANSACTIONS.md) and [review-only backend proposal](approvals/CUSTOMER-API-COMPLETION.md). Statements below about unimplemented customer pages or no test writes describe the earlier stage. Production checkout remains disabled and Laravel application logic is unchanged.
+
 Audited 13 November 2026. This is a source audit, not a claim that every workflow has passed an integration test. No migrations, seeders, customer writes, orders or payments were executed.
 
 ## Workspace
@@ -86,4 +88,4 @@ Architecture checked against [Next.js installation](https://nextjs.org/docs/app/
 
 ## Delivery result
 
-Phase 1 foundation implemented in `storefront/` only, plus this audit. Existing Laravel controllers, resources, models, migrations, routes, admin templates, environment, and root npm/composer configuration were not edited. Next.js 16.4.6 production build and strict TypeScript passed; 25 contract/transport/rendering tests and 16 read-only production HTTP smoke checks passed. Homepage special offers use validated backend amounts; `/returns` reads published policies from the real API. Live local collections were empty. API outage behavior was verified. Browser inventory was empty, so visual/device verification remains pending. See `storefront/README.md` for exact setup, files, asset provenance, verification and release limits.
+Phase 1 foundation implemented in `storefront/` only, plus documentation. Existing Laravel controllers, resources, models, migrations, routes, admin templates, environment, and root npm/composer configuration were not edited. Next.js 16.4.6 production build and strict TypeScript passed; 25 contract/transport/rendering tests and 16 read-only HTTP smoke checks passed. Local Chromium QA subsequently passed 12 Playwright tests covering 70 page/viewport combinations, real public-catalog product/gallery/search flows and the documented read-only scope. Verified brand colors, contrast, typography, sticky/mobile navigation and card/gallery layouts were refined. Live local collections remain empty; no data was inserted. Account/cart/checkout notices are not functioning transactional flows and remain release blockers. See `docs/STOREFRONT-VISUAL-QA.md` for browser evidence, remaining backend dependencies and release limitations, and `storefront/README.md` for setup.

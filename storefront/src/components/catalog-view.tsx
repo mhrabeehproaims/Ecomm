@@ -10,9 +10,11 @@ export function queryText(params: CatalogQuery, key: string) { return (typeof pa
 
 export async function CatalogView({ params }: { params: CatalogQuery }) {
   const category = queryText(params, 'category'), keyword = queryText(params, 'keyword');
-  const categories = await getCategories();
+  const categoriesRequest = getCategories();
+  const productsRequest = category ? null : getProducts(keyword);
+  const categories = await categoriesRequest;
   if (category && categories.ok && !categories.data.data.some(c => c.name === category)) notFound();
-  const result = category && !categories.ok ? { ok: false as const, kind: 'unavailable' as const } : await getProducts(keyword, category);
+  const result = category && !categories.ok ? { ok: false as const, kind: 'unavailable' as const } : await (productsRequest || getProducts(keyword, category));
   const products = result.ok ? result.data.data : [];
   const filters = { brand: queryText(params, 'brand'), subcategory: queryText(params, 'subcategory'), stock: queryText(params, 'stock'), max: queryText(params, 'max'), sort: queryText(params, 'sort'), collection: queryText(params, 'collection') };
   const filtered = filterProducts(products, filters);
@@ -25,8 +27,9 @@ export async function CatalogView({ params }: { params: CatalogQuery }) {
   return <div className="container catalog-page">
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Home</Link><span aria-hidden="true">/</span><span>Collection</span>{category && <><span aria-hidden="true">/</span><span>{category}</span></>}</nav>
     <div className="page-heading"><p className="eyebrow">Find your next favourite</p><h1>{keyword ? `Results for “${keyword}”` : category || (filters.collection === 'offers' ? 'A little more value.' : 'The everyday collection.')}</h1><p>Take a closer look. There’s a little more to discover.</p></div>
+    <details className="filter-disclosure" open={Boolean(filters.brand || filters.subcategory || filters.stock || filters.max || filters.sort)}>
+      <summary><SlidersHorizontal size={18} aria-hidden="true" /><span>Filter & sort</span><span className="filter-summary-help">Refine your discovery</span></summary>
     <form action="/products" className="catalog-filters">
-      <div className="filters-title"><SlidersHorizontal size={17} /><strong>Refine your discovery</strong></div>
       {keyword && <input type="hidden" name="keyword" value={keyword} />}
       {filters.collection && <input type="hidden" name="collection" value={filters.collection} />}
       <div className="filter-fields"><label>Category<select name="category" defaultValue={category}><option value="">All categories</option>{categories.ok && categories.data.data.map(c => <option key={c.name}>{c.name}</option>)}</select></label>
@@ -36,9 +39,9 @@ export async function CatalogView({ params }: { params: CatalogQuery }) {
       <label>Maximum price (₹)<input type="number" min="0" step="0.01" name="max" defaultValue={filters.max} placeholder="Any price" /></label>
       <label>Sort by<select name="sort" defaultValue={filters.sort}><option value="">Newest first</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option><option value="name">Name: A to Z</option></select></label>
       <button className="button button-primary" type="submit">Apply filters</button><Link className="filter-clear" href="/products">Clear all</Link></div>
-    </form>
+    </form></details>
     <div className="catalog-results-header"><span>{result.ok ? `${filtered.length} ${filtered.length === 1 ? 'discovery' : 'discoveries'}` : 'Catalog unavailable'}</span><details><summary>About these filters</summary><p>Search and category use the catalog API. Brand, subcategory, price, availability, sorting and page controls apply to the full catalog response loaded on our server.</p></details></div>
-    {!result.ok ? <CatalogState error /> : pageProducts.length ? <ProductGrid products={pageProducts} /> : <CatalogState title={products.length ? 'Nothing here just yet.' : undefined} description={products.length ? 'Try another search or clear your filters to explore more of the collection.' : undefined} />}
+    {!result.ok ? <CatalogState error /> : pageProducts.length ? <ProductGrid products={pageProducts} eagerFirst /> : <CatalogState title={products.length ? 'Nothing here just yet.' : undefined} description={products.length ? 'Try another search or clear your filters to explore more of the collection.' : undefined} />}
     {pages > 1 && <nav className="pagination" aria-label="Catalog pages">{page > 1 ? <Link href={nextPage(page - 1)}><ArrowLeft size={16} />Previous</Link> : <span />}<span aria-current="page">Page {page} of {pages}</span>{page < pages ? <Link href={nextPage(page + 1)}>Next<ArrowRight size={16} /></Link> : <span />}</nav>}
   </div>;
 }

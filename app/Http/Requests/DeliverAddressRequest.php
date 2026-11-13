@@ -22,15 +22,15 @@ class DeliverAddressRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'phone' => 'required|string',
-            'email' => 'nullable|string',
-            'address_line1' => 'required|string',
-            'address_line2' => 'nullable|string',
-            'city' => 'required|string',
-            'state' => 'required|string',
-            'country' => 'nullable|string',
-            'postal_code' => 'required|string',
-            'is_default' => 'nullable'
+            'phone' => ['required', 'string', 'regex:/^[+]?[0-9]{7,15}$/D'],
+            'email' => 'nullable|email|max:200',
+            'address_line1' => 'required|string|max:255',
+            'address_line2' => 'nullable|string|max:255',
+            'city' => 'required|string|max:100',
+            'state' => 'required|string|max:100',
+            'country' => 'nullable|string|max:100',
+            'postal_code' => 'required|string|max:20',
+            'is_default' => 'nullable|boolean',
         ];
     }
 }

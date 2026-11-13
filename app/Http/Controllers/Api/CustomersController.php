@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\newCustomerCreatedEvent;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
-use App\Events\newCustomerCreatedEvent;
+use Illuminate\Validation\Rule;
 
 class CustomersController extends Controller
 {
@@ -17,23 +17,24 @@ class CustomersController extends Controller
 
     public function store(Request $request)
     {
+        if (is_int($request->input('phone'))) {
+            $request->merge(['phone' => (string) $request->input('phone')]);
+        }
         $validated = $request->validate([
-            'first_name' => 'required|string',
-            'last_name' => 'nullable',
-            'email' => 'nullable|email|unique:customers,email',
-            'phone' => 'required|unique:customers,phone',
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'nullable|string|max:100',
+            'email' => 'nullable|email|max:200|unique:customers,email',
+            'phone' => ['required', 'string', 'regex:/^[+]?[0-9]{7,15}$/D', 'unique:customers,phone'],
             'address' => 'nullable',
             'city' => 'nullable',
             'state' => 'nullable',
             'country' => 'nullable',
             'zip' => 'nullable',
-            'password' => 'required|min:5',
-            'status' => 'nullable',
-            'profile_pic' => 'nullable',
+            'password' => 'required|string|min:8|max:128',
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
-        $validated['status'] = $validated['status'] ?? 1;
+        $validated['status'] = 1;
         $user = Customer::create($validated);
 
         if ($request->filled('email')) {
@@ -55,53 +56,54 @@ class CustomersController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $customer
+            'data' => $customer,
         ]);
     }
+
     public function update(Request $request)
     {
+        if (is_int($request->input('phone'))) {
+            $request->merge(['phone' => (string) $request->input('phone')]);
+        }
         $user = Auth::user();
         $validated = $request->validate([
-            'first_name' => 'required|string',
-            'last_name'  => 'nullable|string',
-            'email'      => [
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'nullable|string|max:100',
+            'email' => [
                 'nullable',
                 'email',
                 Rule::unique('customers', 'email')->ignore($user->customer_id, 'customer_id'),
             ],
-            'phone'      => [
+            'phone' => [
                 'required',
+                'string', 'regex:/^[+]?[0-9]{7,15}$/D',
                 Rule::unique('customers', 'phone')->ignore($user->customer_id, 'customer_id'),
             ],
-            'address'    => 'nullable|string',
-            'city'       => 'nullable|string',
-            'state'      => 'nullable|string',
-            'country'    => 'nullable|string',
-            'zip'        => 'nullable|string',
-            'status'     => 'nullable|integer',
-            'old_password'      => 'nullable',
-            'new_password'      => 'required_with:old_password|min:5|confirmed',
+            'address' => 'nullable|string',
+            'city' => 'nullable|string',
+            'state' => 'nullable|string',
+            'country' => 'nullable|string',
+            'zip' => 'nullable|string',
+            'old_password' => 'required_with:new_password|nullable|string|max:128',
+            'new_password' => 'required_with:old_password|nullable|string|min:8|max:128|confirmed',
             'new_password_confirmation' => 'nullable',
+            'profile_pic' => 'nullable|image|mimes:jpeg,png,webp|max:2048',
         ]);
 
-
         if ($request->filled('new_password')) {
-            if (!Hash::check($request->old_password, $user->password)) {
+            if (! Hash::check($request->old_password, Customer::disableCache()->where('customer_id', $user->customer_id)->value('password'))) {
                 return response()->json(['error' => 'Old password is incorrect'], 422);
             }
 
             $validated['password'] = Hash::make($request->new_password);
         }
 
-
-        $validated['status'] = $validated['status'] ?? 1;
-
         // Remove fields not in DB
         unset($validated['old_password'], $validated['new_password'], $validated['new_password_confirmation']);
 
         if ($request->hasFile('profile_pic')) {
             $file = $request->file('profile_pic');
-            $image_name = time() . '_' . Str::random(5) . '.' . $file->getClientOriginalExtension();
+            $image_name = time().'_'.Str::random(5).'.'.$file->getClientOriginalExtension();
             $file->storeAs('CustomerImage', $image_name, 'public');
             $validated['profile_pic'] = $image_name;
         }
@@ -112,16 +114,15 @@ class CustomersController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'user updated successfully',
-            'user' => $user->customer_id
+            'user' => $user->customer_id,
         ]);
     }
-
 
     public function destroy(Request $request)
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json(['status' => 'error', 'message' => 'User not authenticated'], 401);
         }
 
@@ -130,7 +131,7 @@ class CustomersController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete account'
+                'message' => 'Failed to delete account',
             ], 500);
         }
 
@@ -138,7 +139,7 @@ class CustomersController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Your account has been deleted successfully'
+            'message' => 'Your account has been deleted successfully',
         ]);
     }
 }
