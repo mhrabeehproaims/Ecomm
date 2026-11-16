@@ -88,3 +88,12 @@ test('banners observe Indian business date boundaries and sort order', () => {
 test('HTML descriptions are rendered as plain text', () => {
   assert.equal(plainText('<p>One &amp; two</p><script>alert(1)</script>'), 'One & two alert(1)');
 });
+
+test('fashion size and price-range filters never invent sizes or treat missing prices as zero', () => {
+  const medium = { ...product, size: 'Medium', retail: 100 };
+  const small = { ...product, size: 'Small', retail: 50 };
+  const unknown = { ...product, size: 'Medium', retail: null };
+  assert.deepEqual(filterProducts([medium, small, unknown], { size: 'Medium', min: '80', max: '120' }), [medium]);
+  assert.deepEqual(filterProducts([medium, small], { size: 'XL' }), []);
+  assert.deepEqual(filterProducts([medium, small], { min: '120', max: '80' }), []);
+});

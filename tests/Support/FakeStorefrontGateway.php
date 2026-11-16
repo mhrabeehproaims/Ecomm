@@ -39,7 +39,14 @@ final class FakeStorefrontGateway implements PaymentGateway
 
     public function payment(string $id): array
     {
-        return $this->payments[$id];
+        $payment = $this->payments[$id];
+        $refunded = array_sum(array_map(fn ($refund) => $refund['amount'], array_filter($this->refunds, fn ($refund) => $refund['payment_id'] === $id && $refund['status'] === 'processed')));
+        $payment['amount_refunded'] ??= $refunded;
+        if ($refunded > 0 && $refunded === $payment['amount'] && $payment['status'] === 'captured') {
+            $payment['status'] = 'refunded';
+        }
+
+        return $payment;
     }
 
     public function orderPayments(string $id): array
@@ -73,6 +80,11 @@ final class FakeStorefrontGateway implements PaymentGateway
     public function refund(string $id): array
     {
         return $this->refunds[$id];
+    }
+
+    public function paymentRefunds(string $payment): array
+    {
+        return array_values(array_filter($this->refunds, fn ($refund) => $refund['payment_id'] === $payment));
     }
 
     public function paymentState(string $providerOrder, string $status, string $payment = 'pay_Test1'): array

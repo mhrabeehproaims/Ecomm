@@ -22,7 +22,6 @@ use Illuminate\Database\RecordNotFoundException;
 use Illuminate\Database\RecordsNotFoundException;
 use Illuminate\Foundation\Exceptions\Renderer\Renderer;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Exceptions\BackedEnumCaseNotFoundException;
@@ -530,6 +529,17 @@ class Handler implements ExceptionHandlerContract
      * @param  \Throwable  $e
      * @return array
      */
+    public function contextForException(Throwable $e)
+    {
+        return $this->buildExceptionContext($e);
+    }
+
+    /**
+     * Create the context array for logging the given exception.
+     *
+     * @param  \Throwable  $e
+     * @return array
+     */
     protected function buildExceptionContext(Throwable $e)
     {
         return array_merge(
@@ -985,7 +995,7 @@ class Handler implements ExceptionHandlerContract
                 $response->getTargetUrl(), $response->getStatusCode(), $response->headers->all()
             );
         } else {
-            $response = new Response(
+            $response = response(
                 $response->getContent(), $response->getStatusCode(), $response->headers->all()
             );
         }
@@ -1002,7 +1012,7 @@ class Handler implements ExceptionHandlerContract
      */
     protected function prepareJsonResponse($request, Throwable $e)
     {
-        return new JsonResponse(
+        return response()->json(
             $this->convertExceptionToArray($e),
             $this->isHttpException($e) ? $e->getStatusCode() : 500,
             $this->isHttpException($e) ? $e->getHeaders() : [],
@@ -1046,12 +1056,12 @@ class Handler implements ExceptionHandlerContract
             if (! empty($alternatives = $e->getAlternatives())) {
                 $message .= '. Did you mean one of these?';
 
-                with(new Error($output))->render($message);
-                with(new BulletList($output))->render($alternatives);
+                (new Error($output))->render($message);
+                (new BulletList($output))->render($alternatives);
 
                 $output->writeln('');
             } else {
-                with(new Error($output))->render($message);
+                (new Error($output))->render($message);
             }
 
             return;

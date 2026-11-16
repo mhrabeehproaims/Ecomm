@@ -61,4 +61,18 @@ final class RazorpayTestGateway implements PaymentGateway
     {
         return $this->request('GET', 'refunds/'.$this->id($id));
     }
+
+    public function paymentRefunds(string $payment): array
+    {
+        $all = [];
+        for ($skip = 0; $skip < 10000; $skip += 100) {
+            $page = $this->request('GET', 'payments/'.$this->id($payment).'/refunds', ['count' => 100, 'skip' => $skip]);
+            abort_unless(is_array($page['items'] ?? null), 503, 'Refund collection could not be verified.');
+            $all = [...$all, ...$page['items']];
+            if (count($page['items']) < 100) {
+                return $all;
+            }
+        }
+        abort(409, 'Refund collection exceeds the reconciliation batch limit.');
+    }
 }

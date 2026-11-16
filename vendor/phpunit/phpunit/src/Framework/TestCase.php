@@ -197,6 +197,10 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
      */
     private array $mockObjects = [];
     private TestStatus $status;
+
+    /**
+     * @var non-negative-int
+     */
     private int $numberOfAssertionsPerformed = 0;
     private mixed $testResult                = null;
     private string $output                   = '';
@@ -363,10 +367,11 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
             return;
         }
 
-        IsolatedTestRunnerRegistry::run(
+        (new SeparateProcessTestRunner)->run(
             $this,
             $this->runClassInSeparateProcess && !$this->runTestInSeparateProcess,
             $this->preserveGlobalState,
+            $this->requiresXdebug(),
         );
     }
 
@@ -809,14 +814,20 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
     }
 
     /**
+     * @param non-negative-int $count
+     *
      * @internal This method is not covered by the backward compatibility promise for PHPUnit
      */
     final public function addToAssertionCount(int $count): void
     {
+        assert($count >= 0);
+
         $this->numberOfAssertionsPerformed += $count;
     }
 
     /**
+     * @return non-negative-int
+     *
      * @internal This method is not covered by the backward compatibility promise for PHPUnit
      */
     final public function numberOfAssertionsPerformed(): int
@@ -1924,7 +1935,9 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
                 $message = 'Test code or tested code removed error handlers other than its own';
             }
 
-            foreach ($activeErrorHandlers as $handler) {
+            $numberOfActiveErrorHandlers = count($activeErrorHandlers);
+
+            for ($i = 0; $i < $numberOfActiveErrorHandlers; $i++) {
                 restore_error_handler();
             }
 
@@ -1951,7 +1964,9 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
                 $message = 'Test code or tested code removed exception handlers other than its own';
             }
 
-            foreach ($activeExceptionHandlers as $handler) {
+            $numberOfActiveExceptionHandlers = count($activeExceptionHandlers);
+
+            for ($i = 0; $i < $numberOfActiveExceptionHandlers; $i++) {
                 restore_exception_handler();
             }
 
@@ -2105,18 +2120,31 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
             }
         }
 
-        return new Snapshot(
-            $excludeList,
-            $backupGlobals,
-            (bool) $this->backupStaticProperties,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-        );
+        try {
+            return new Snapshot(
+                $excludeList,
+                $backupGlobals,
+                (bool) $this->backupStaticProperties,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+            );
+        } catch (Throwable $t) {
+            Event\Facade::emitter()->testPreparationFailed(
+                $this->valueObjectForEvents(),
+            );
+
+            Event\Facade::emitter()->testErrored(
+                $this->valueObjectForEvents(),
+                Event\Code\ThrowableBuilder::from($t),
+            );
+
+            throw $t;
+        }
     }
 
     private function compareGlobalStateSnapshots(Snapshot $before, Snapshot $after): void
@@ -2152,20 +2180,22 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
      */
     private function compareGlobalStateSnapshotPart(array $before, array $after, string $header): void
     {
-        if ($before != $after) {
-            $differ = new Differ(new UnifiedDiffOutputBuilder($header));
-
-            Event\Facade::emitter()->testConsideredRisky(
-                $this->valueObjectForEvents(),
-                'This test modified global state but was not expected to do so' . PHP_EOL .
-                trim(
-                    $differ->diff(
-                        Exporter::export($before),
-                        Exporter::export($after),
-                    ),
-                ),
-            );
+        if ($before == $after) {
+            return;
         }
+
+        $differ = new Differ(new UnifiedDiffOutputBuilder($header));
+
+        Event\Facade::emitter()->testConsideredRisky(
+            $this->valueObjectForEvents(),
+            'This test modified global state but was not expected to do so' . PHP_EOL .
+            trim(
+                $differ->diff(
+                    Exporter::export($before),
+                    Exporter::export($after),
+                ),
+            ),
+        );
     }
 
     private function shouldInvocationMockerBeReset(MockObject $mock): bool
@@ -2587,6 +2617,11 @@ abstract class TestCase extends Assert implements Reorderable, SelfDescribing, T
     private function requirementsNotSatisfied(): bool
     {
         return (new Requirements)->requirementsNotSatisfiedFor(static::class, $this->methodName) !== [];
+    }
+
+    private function requiresXdebug(): bool
+    {
+        return (new Requirements)->requiresXdebug(static::class, $this->methodName);
     }
 
     /**

@@ -9,6 +9,8 @@ import { mediaUrl } from '@/lib/media';
 import { CatalogState, ProductGrid, SectionHeading } from '@/components/catalog';
 import { ProductGallery } from '@/components/product-gallery';
 import { ProductActions } from '@/components/product-actions';
+import { ProductDescription } from '@/components/product-description';
+import { ProductSupport } from '@/components/product-support';
 
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ id?: string | string[] }> };
 async function load(searchParams: Props['searchParams']) {
@@ -22,7 +24,11 @@ async function load(searchParams: Props['searchParams']) {
 }
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const result = await load(searchParams);
-  return { title: result && !result.error ? result.product.product_name : 'Product details', description: result && !result.error ? plainText(result.product.description).slice(0, 155) || `Explore ${result.product.product_name} at Vanthara.` : undefined, robots: { index: false, follow: true } };
+  if (!result || result.error) return { title: 'Product details', robots: { index: false, follow: true } };
+  const product = result.product;
+  const description = plainText(product.description).slice(0, 155) || `Explore ${product.product_name} at Vanthara.`;
+  const image = mediaUrl(apiOrigin, product.primary_image, product.image_path);
+  return { title: product.product_name, description, openGraph: { title: product.product_name, description, ...(image ? { images: [{ url: image, alt: product.product_name }] } : {}) }, robots: { index: false, follow: true } };
 }
 export default async function ProductPage({ searchParams }: Props) {
   const result = await load(searchParams);
@@ -40,11 +46,11 @@ export default async function ProductPage({ searchParams }: Props) {
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structured).replace(/</g, '\\u003c') }} />
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Home</Link><span>/</span><Link href="/products">Collection</Link>{product.category && <><span>/</span><Link href={catalogHref({ category: product.category })}>{product.category}</Link></>}</nav>
     <div className="product-detail"><div className="product-heading"><p className="eyebrow">{product.brand || 'The Vanthara collection'}</p><h1>{product.product_name}</h1></div><ProductGallery images={galleryImages} name={product.product_name} />
-    <div className="product-information"><p className="detail-description">{plainText(product.description) || 'Explore the product specifications below.'}</p><div className="detail-price">{price !== null ? money(price) : 'Price unavailable'}{mrp !== null && price !== null && mrp > price && <del>MRP {money(mrp)}</del>}</div>{product.offer?.title && <p className="offer-note">{product.offer.title}</p>}<p className={`detail-stock ${stock && stock > 0 ? 'available' : ''}`}><PackageOpen size={17} />{stock === null ? 'Availability not provided' : stock > 0 ? `${stock} available` : 'Currently out of stock'}</p>
-    <ProductActions productId={product.product_id} stock={stock} />
-    <dl className="specifications">{specs.map(([name, value]) => <div key={String(name)}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
-    {product.health_benefit && <details className="detail-disclosure"><summary>More product information</summary><p>{plainText(product.health_benefit)}</p></details>}
+    <div className="product-information">{plainText(product.description) && <p className="detail-description">{plainText(product.description)}</p>}<div className="detail-price">{price !== null ? money(price) : 'Price unavailable'}{mrp !== null && price !== null && mrp > price && <del>MRP {money(mrp)}</del>}</div>{product.offer?.title && <p className="offer-note">{product.offer.title}</p>}<p className={`detail-stock ${stock && stock > 0 ? 'available' : ''}`}><PackageOpen size={17} />{stock === null ? 'Availability not provided' : stock > 0 ? `${stock} available` : 'Currently out of stock'}</p>
+    <ProductSupport product={product} catalog={catalog} imageOrigin={apiOrigin} />
+    <ProductActions key={`${product.category}:${product.product_name}:${product.size}`} productId={product.product_id} stock={stock} size={product.size} name={product.product_name} category={product.category} />
+    <details className="detail-disclosure" open><summary>Product details</summary><dl className="specifications">{specs.map(([name, value]) => <div key={String(name)}><dt>{name}</dt><dd>{value}</dd></div>)}</dl></details>
     <details className="detail-disclosure"><summary>Delivery & returns</summary><p>Delivery charges and serviceable locations will be shown when online ordering becomes available. Check the published return policies for current information and eligibility.</p><Link className="text-link" href="/returns">Return information <ArrowUpRight size={14} /></Link></details>
-    </div></div>{related.length > 0 && <section className="section"><SectionHeading eyebrow="Keep exploring" title="A few more discoveries." /><ProductGrid products={related} /></section>}
+    </div></div><ProductDescription product={product} imageOrigin={apiOrigin} />{related.length > 0 && <section className="section"><SectionHeading eyebrow="Keep exploring" title="A few more discoveries." /><ProductGrid products={related} /></section>}
   </div>;
 }

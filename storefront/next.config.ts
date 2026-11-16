@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const origin = new URL(process.env.LARAVEL_API_ORIGIN || 'http://127.0.0.1:8137');
+const origin = new URL(process.env.LARAVEL_API_ORIGIN || 'http://localhost:8000');
 const root = path.dirname(fileURLToPath(import.meta.url));
 const config: NextConfig = {
   turbopack: { root },

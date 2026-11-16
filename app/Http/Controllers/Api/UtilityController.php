@@ -20,36 +20,42 @@ class UtilityController extends Controller
     public function getProductsByCategory($categ_id)
     {
         $categ_id = decrypt($categ_id);
-        $prods = Product::where('category_id', $categ_id)->get();
+        $prods = Product::forCatalog()->where('category_id', $categ_id)->get();
         $products = ProductResource::collection($prods);
+
         return response()->json([
             'status' => 'success',
-            'data' => $products
+            'data' => $products,
         ]);
     }
+
     public function getProductsBySubCategory($sub_categ_id)
     {
-        $prods = Product::where('sub_category_id', $sub_categ_id)->get();
+        $prods = Product::forCatalog()->where('sub_category_id', $sub_categ_id)->get();
         $products = ProductResource::collection($prods);
+
         return response()->json([
             'status' => 'success',
-            'data' => $products
+            'data' => $products,
         ]);
     }
+
     public function getProductsByBrand($brand_id)
     {
-        $prods = Product::where('brand_id', $brand_id)->get();
+        $prods = Product::forCatalog()->where('brand_id', $brand_id)->get();
         $products = ProductResource::collection($prods);
+
         return response()->json([
             'status' => 'success',
-            'data' => $products
+            'data' => $products,
         ]);
     }
+
     public function get_random_products()
     {
         $user = Auth::user();
 
-        $query = Product::inRandomOrder()
+        $query = Product::forCatalog()->inRandomOrder()
             ->with(['wishlist' => function ($q) use ($user) {
                 if ($user) {
                     $q->where('user_id', $user->customer_id);
@@ -62,18 +68,20 @@ class UtilityController extends Controller
         // Map and append `is_wishlisted`
         $products = $randomProducts->map(function ($product) use ($user) {
             $product->is_wishlisted = $user && $product->wishlist && $product->wishlist->isNotEmpty();
+
             return $product;
         });
 
         return response()->json([
             'status' => 'success',
-            'data' => ProductResource::collection($products)
+            'data' => ProductResource::collection($products),
         ]);
     }
 
     public function get_all_brands()
     {
         $brands = Brand::where('status', 1)->latest()->get();
+
         return response()->json([
             'status' => 'success',
             'data' => $brands,
@@ -84,17 +92,18 @@ class UtilityController extends Controller
     public function top_selling_products()
     {
         $topProducts = OrderItem::select('product_id', DB::raw('SUM(quantity) as total_sold'))
+            ->whereHas('product', fn ($q) => $q->active())
             ->groupBy('product_id')
             ->orderByDesc('total_sold')
             ->take(10)
             ->with(['product' => function ($query) {
-                $query->with('images'); // eager load product images
+                $query->forCatalog();
             }])
             ->get();
 
         $topProducts->each(function ($item) {
             if ($item->product) {
-                $item->product;
+                $item->product->setAttribute('catalog_category', $item->product->category?->categ_name);
             }
         });
 
@@ -103,7 +112,6 @@ class UtilityController extends Controller
             'data' => $topProducts,
         ], 200);
     }
-
 
     public function getAllPolicies()
     {
@@ -121,7 +129,7 @@ class UtilityController extends Controller
 
         $request->validate([
             'coupon_code' => 'required',
-            'total_amount' => 'required'
+            'total_amount' => 'required',
         ]);
         $couponCode = $request->input('coupon_code');
         $total_amount = $request->input('total_amount');
@@ -129,7 +137,7 @@ class UtilityController extends Controller
         if ($couponCode) {
             $coupon = Coupon::where('code', $couponCode)->first();
 
-            if (!$coupon) {
+            if (! $coupon) {
                 return response()->json(['status' => 'error', 'message' => 'Invalid coupon code'], 400);
             }
 
@@ -146,7 +154,7 @@ class UtilityController extends Controller
             if ($coupon->max_uses && $totalUsed >= $coupon->max_uses) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'This coupon usage limit has been reached'
+                    'message' => 'This coupon usage limit has been reached',
                 ], 400);
             }
 
@@ -163,7 +171,7 @@ class UtilityController extends Controller
                 return response()->json(['status' => 'error', 'message' => "The minimum order amount is {$coupon->min_order_amount} for this coupon"], 400);
             }
 
-            return response()->json(['status' => 'success', 'message' => "The coupon id valid"], 200);
+            return response()->json(['status' => 'success', 'message' => 'The coupon id valid'], 200);
         }
     }
 
@@ -183,6 +191,7 @@ class UtilityController extends Controller
         );
 
         event(new NewEnquiryEvent($message_data));
+
         return response()->json([
             'status' => 'success',
             'message' => 'Email sent succesfully',

@@ -13,6 +13,27 @@ test.beforeAll(async ({ request }) => {
   expect((await identity.json()).environment).toBe('isolated-storefront-test');
   await fs.mkdir(output, { recursive: true });
 });
+
+test('customer invoice download uses the private session and rejects foreign and anonymous access', async ({ page, request }) => {
+  const fixture = JSON.parse(execFileSync('php', ['../tests/Storefront/document-fixture.php'], { encoding: 'utf8' })) as { phone: string; password: string; order_id: number; invoice: string };
+  expect((await request.get(`/api/customer/document?order_id=${fixture.order_id}`)).status()).toBe(401);
+  await login(page, '9000000011', 'FixturePassword123!');
+  expect((await page.request.get(`/api/customer/document?order_id=${fixture.order_id}`)).status()).toBe(404);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await login(page, fixture.phone, fixture.password);
+  await page.goto(`/orders/${fixture.order_id}`);
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download invoice', exact: true }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe(`invoice-${fixture.order_id}.pdf`);
+  await download.saveAs('artifacts/transactions/customer-invoice.pdf');
+  const bytes = await fs.readFile('artifacts/transactions/customer-invoice.pdf');
+  expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+  const response = await page.request.get(`/api/customer/document?order_id=${fixture.order_id}`);
+  expect(response.headers()['cache-control']).toContain('no-store');
+  expect((await request.get(`http://127.0.0.1:8138/download-invoice/${fixture.invoice}.pdf`)).status()).toBe(404);
+  expect((await request.get(`http://127.0.0.1:8138/storage/Invoices/${fixture.invoice}.pdf`)).status()).toBe(404);
+});
 test.beforeEach(async ({ page }) => { page.setDefaultTimeout(15_000); });
 test.afterEach(async ({ page }) => {
   expect(scriptErrors.get(page)).toEqual([]);
@@ -109,10 +130,10 @@ test('isolated registration → profile → addresses → wishlist → cart → 
   console.log('Journey: wishlist and bag');
   await page.goto('/products');
   await page.locator('.product-card').filter({ hasText: 'QA Cotton Bag' }).getByRole('link', { name: 'View QA Cotton Bag', exact: true }).click();
-  await page.getByRole('button', { name: 'Save / unsave' }).click();
-  await expect(page.locator('.purchase-message')).toContainText('wishlist');
+  await page.getByRole('button', { name: 'Save QA Cotton Bag to wishlist' }).click();
+  await expect(page.getByRole('button', { name: 'Remove QA Cotton Bag from wishlist' })).toHaveAttribute('aria-pressed', 'true');
   await page.goto('/wishlist');
-  await expect(page.locator('.saved-row')).toContainText('QA Cotton Bag');
+  await expect(page.locator('.saved-fashion-card')).toContainText('QA Cotton Bag');
   await page.getByRole('button', { name: 'Add to bag', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Added to your bag');
   await page.getByRole('button', { name: 'Remove favourite' }).click();

@@ -122,7 +122,10 @@ final class CheckoutPricing
             throw ValidationException::withMessages(['payment_method' => 'Online payment requires an order of at least INR 1.']);
         }
 
-        return ['currency' => 'INR', 'address' => $snapshot, 'payment_method' => $method, 'items' => $lines,
+        $buyer = DB::table('customers')->where('customer_id', $customer)->first();
+        $customerSnapshot = array_intersect_key((array) $buyer, array_flip(['first_name', 'last_name', 'phone', 'email', 'address', 'city', 'state', 'country', 'zip']));
+
+        return ['currency' => 'INR', 'address' => $snapshot, 'customer_snapshot' => $customerSnapshot, 'payment_method' => $method, 'items' => $lines,
             'subtotal_minor' => $subtotal, 'discount_minor' => $discount, 'tax_minor' => $taxTotal, 'shipping_minor' => $shipping,
             'total_minor' => $total, 'shipping_tax_minor' => $shippingTax, 'tax_inclusive' => true, 'coupon' => $coupon ? ['id' => $coupon->id, 'code' => $coupon->code, 'type' => $coupon->type, 'value' => $coupon->value] : null];
     }

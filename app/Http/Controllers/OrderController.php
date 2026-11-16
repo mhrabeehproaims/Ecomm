@@ -6,13 +6,10 @@ use App\Events\orderShippedEvent;
 use App\Mail\OrderDeliveredMail;
 use App\Models\DeliveryFollowup;
 use App\Models\DeliveryPartner;
-use app\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderStatusLog;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 
 class OrderController extends Controller
@@ -117,16 +114,16 @@ class OrderController extends Controller
                  </a>';
 
                     $downloadBtn = $row->invoice
-                        ? '<a href="'.asset('storage/Invoices/'.$row->invoice->invoice_number.'.pdf').'" 
-                        download="'.$row->invoice->invoice_number.'.pdf" 
+                        ? '<a href="'.route('download.invoice', $row->invoice->invoice_number.'.pdf').'"
+                        download="'.$row->invoice->invoice_number.'.pdf"
                         class="btn btn-secondary btn-sm me-1 mb-1">
                         <i class="bx bx-download"></i> Invoice
                     </a>'
                         : '';
 
                     $delSlipBtn = $row->invoice
-                        ? '<a href="'.asset('storage/PackingSlips/'.$row->invoice->invoice_number.'_packing_slip.pdf').'" 
-                        download="'.$row->invoice->invoice_number.'_packing_slip.pdf" 
+                        ? '<a href="'.route('download.packing-slip', $row->invoice->invoice_number.'_packing_slip.pdf').'"
+                        download="'.$row->invoice->invoice_number.'_packing_slip.pdf"
                         class="btn btn-success btn-sm mb-1">
                         <i class="bx bx-download"></i> Slip
                     </a>'
@@ -170,124 +167,101 @@ class OrderController extends Controller
             'approx_delivery_charge' => 'nullable|numeric',
         ]);
 
-        $status = $request->status;
-        if (\Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts')
-            && ($secure = \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $id)->first())) {
-            $record = \Illuminate\Support\Facades\DB::table('orders')->where('order_id', $id)->first();
-            $quotedShipping = json_decode($secure->breakdown, true)['shipping_minor'];
-            if ($request->filled('approx_delivery_charge') && \App\Services\Storefront\Money::minor($request->input('approx_delivery_charge')) !== $quotedShipping) {
-                throw \Illuminate\Validation\ValidationException::withMessages(['approx_delivery_charge' => 'The accepted checkout delivery charge cannot be changed during fulfillment.']);
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($id, $request) {
+            $initial = \Illuminate\Support\Facades\DB::table('orders')->where('order_id', $id)->first();
+            abort_unless($initial, 404);
+            if (\Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts') && \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $id)->exists()) {
+                app(\App\Services\Storefront\CheckoutService::class)->lockCustomer((int) $initial->customer_id, false);
             }
-            $request->merge(['approx_delivery_charge' => \App\Services\Storefront\Money::decimal($quotedShipping)]);
-            if ($status === 'rejected' && $secure->state === 'reserved') {
-                app(\App\Services\Storefront\CheckoutService::class)->release($record->customer_id, (int) $id);
+            \Illuminate\Support\Facades\DB::table('orders')->where('order_id', $id)->lockForUpdate()->first();
+            $status = $request->status;
+            if (\Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts')
+                && ($secure = \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $id)->lockForUpdate()->first())) {
+                $record = \Illuminate\Support\Facades\DB::table('orders')->where('order_id', $id)->lockForUpdate()->first();
+                $quotedShipping = json_decode($secure->breakdown, true)['shipping_minor'];
+                if ($request->filled('approx_delivery_charge') && \App\Services\Storefront\Money::minor($request->input('approx_delivery_charge')) !== $quotedShipping) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['approx_delivery_charge' => 'The accepted checkout delivery charge cannot be changed during fulfillment.']);
+                }
+                $request->merge(['approx_delivery_charge' => \App\Services\Storefront\Money::decimal($quotedShipping)]);
+                if ($status === 'rejected' && $secure->state === 'reserved') {
+                    app(\App\Services\Storefront\CheckoutService::class)->release($record->customer_id, (int) $id);
 
-                return response()->json(['status' => 'success', 'status2' => $status]);
+                    return response()->json(['status' => 'success', 'status2' => $status]);
+                }
+                if ($status === 'rejected' && in_array($secure->state, ['committed', 'payment_review'])) {
+                    abort(409, 'A committed order requires the reviewed cancellation/refund workflow; changing status cannot settle money or restock items.');
+                }
+                if (in_array($status, ['confirmed', 'processing', 'despatched', 'ontransist', 'delivered'])) {
+                    abort_unless($secure->state === 'committed' && ($record->payment_method !== 'online' || $record->payment_status === 'paid'), 409, 'Verified capture and a committed reservation are required before fulfillment.');
+                }
             }
-            if (in_array($status, ['confirmed', 'processing', 'despatched', 'ontransist', 'delivered'])) {
-                abort_unless($secure->state === 'committed' && ($record->payment_method !== 'online' || $record->payment_status === 'paid'), 409, 'Verified capture and a committed reservation are required before fulfillment.');
+            $order = Order::disableCache()->lockForUpdate()->findOrFail($id);
+            if ($status === 'despatched') {
+                if (! $order->invoice) {
+                    abort_unless(\Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts') && \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $id)->exists(), 409, 'A verified historical snapshot is required before issuing new documents. No order status was changed.');
+                } else {
+                    app(\App\Services\Storefront\OrderDocuments::class)->file($order->invoice, 'invoice');
+                    abort_if($order->delivery_tracking_id && ($order->delivery_tracking_id !== $request->input('unique_tracking_id') || (int) $order->delivery_agent_id !== (int) $request->input('selectAgent')), 409, 'Issued shipment documents require an explicit amendment before shipment details can change.');
+                }
             }
-        }
-        $order = Order::findOrFail($id);
-        $order->update(['status' => $status]);
+            $order->update(['status' => $status]);
 
-        if ($status == 'despatched') {
-            $deliverAgent = [
-                'delivery_tracking_id' => $request->input('unique_tracking_id'),
-                'delivery_date' => $request->input('approx_delivery_date'),
-                'delivery_agent_id' => $request->input('selectAgent'),
-                'delivery_charge' => $request->input('approx_delivery_charge') ?? 0,
+            if ($status == 'despatched') {
+                $deliverAgent = [
+                    'delivery_tracking_id' => $request->input('unique_tracking_id'),
+                    'delivery_date' => $request->input('approx_delivery_date'),
+                    'delivery_agent_id' => $request->input('selectAgent'),
+                    'delivery_charge' => $request->input('approx_delivery_charge') ?? 0,
+                ];
+                $order->update($deliverAgent);
+
+                $invoicePath = $this->generateInvoice($order);
+                if (isset($secure) && $secure) {
+                    \App\Services\Storefront\Outbox::record('order.shipped:'.$order->order_id, 'order.shipped', ['order_id' => $order->order_id, 'invoice' => basename($invoicePath)]);
+                } elseif ($order->customer?->email) {
+                    $invoicePath = route('download.invoice', basename($invoicePath));
+                    \Illuminate\Support\Facades\DB::afterCommit(fn () => event(new orderShippedEvent($order, $invoicePath)));
+                }
+
+                // old
+                // if ($order->customer?->email) {
+                //     event(new orderShippedEvent($order, $invoicePath));
+                // }
+            }
+
+            // if ($status == "delivered") {
+            $data = [
+                'order_id' => $order->order_id,
+                'note' => 'Added from Orders.',
+                'delivery_status' => $status,
+                'email' => $order->customer?->email ?? '',
             ];
-            $order->update($deliverAgent);
 
-            $invoicePath = $this->generateInvoice($order);
-            if ($order->customer?->email) {
-                $invoicePath = asset('storage/'.$invoicePath);
-                event(new orderShippedEvent($order, $invoicePath));
-            }
+            $request = new Request($data);
+            $this->add_followup($request);
 
-            // old
-            // if ($order->customer?->email) {
-            //     event(new orderShippedEvent($order, $invoicePath));
             // }
-        }
 
-        // if ($status == "delivered") {
-        $data = [
-            'order_id' => $order->order_id,
-            'note' => 'Added from Orders.',
-            'delivery_status' => $status,
-            'email' => $order->customer?->email ?? '',
-        ];
-
-        $request = new Request($data);
-        $this->add_followup($request);
-
-        // }
-
-        // $log_data = [
-        //     'order_id' => $id,
-        //     'status' => $status,
-        //     'changed_by' => 1, //Admin
-        //     'remarks' => '',
-        //     'changed_at' => date('Y-m-d h:i:s')
-        // ];
-        // OrderStatusLog::create($log_data);
-        return response()->json([
-            'status' => 'success',
-            'status2' => $status,
-        ]);
+            // $log_data = [
+            //     'order_id' => $id,
+            //     'status' => $status,
+            //     'changed_by' => 1, //Admin
+            //     'remarks' => '',
+            //     'changed_at' => date('Y-m-d h:i:s')
+            // ];
+            // OrderStatusLog::create($log_data);
+            return response()->json([
+                'status' => 'success',
+                'status2' => $status,
+            ]);
+        }, 5);
     }
 
     protected function generateInvoice($order)
     {
-        // If invoice already exists, reuse the old PDF path
-        if ($order->invoice) {
-            return 'Invoices/'.$order->invoice->invoice_number.'.pdf';
-        }
+        $invoice = app(\App\Services\Storefront\OrderDocuments::class)->generate((int) $order->order_id);
 
-        // ✅ Generate a new invoice number
-        $invoiceNumber = 'INV'.str_pad($order->order_id, 7, '0', STR_PAD_LEFT);
-
-        // Create and save the invoice record
-        $invoice = new Invoice;
-        $invoice->order_id = $order->order_id;
-        $invoice->invoice_number = $invoiceNumber;
-        $invoice->invoice_date = now();
-        $invoice->total_amount = $order->total_amount;
-        $invoice->save();
-
-        // ✅ Generate PDF and return the path
-        $this->generatePackingSlip($invoice);
-
-        return $this->generateInvoicePDF($invoice);
-    }
-
-    protected function generateInvoicePDF($invoice)
-    {
-        // Generate PDF content from the Blade view
-        $pdf = Pdf::loadView('invoices.pdf', compact('invoice'));
-
-        // Create the file name
-        $fileName = 'Invoices/'.$invoice->invoice_number.'.pdf';
-
-        // Store the PDF into the 'public' disk
-        Storage::disk('public')->put($fileName, $pdf->output());
-
-        // Optional: return the file path if you need it
-        return $fileName;
-    }
-
-    protected function generatePackingSlip($invoice)
-    {
-        $pdf = Pdf::loadView('invoices.packing_slip', compact('invoice'))
-            ->setPaper('A5', 'portrait');  // A5 fits well on boxes
-
-        $fileName = 'PackingSlips/'.$invoice->invoice_number.'_packing_slip.pdf';
-
-        Storage::disk('public')->put($fileName, $pdf->output());
-
-        return $fileName;
+        return $invoice->invoice_number.'.pdf';
     }
 
     public function today_deliveries(Request $request)
@@ -324,43 +298,51 @@ class OrderController extends Controller
             'email' => 'nullable|email',
         ]);
 
-        $order = Order::find($data['order_id']);
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($data) {
+            $initial = \Illuminate\Support\Facades\DB::table('orders')->where('order_id', $data['order_id'])->first();
+            if (\Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts') && \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $data['order_id'])->exists()) {
+                app(\App\Services\Storefront\CheckoutService::class)->lockCustomer((int) $initial->customer_id, false);
+            }
+            $order = Order::disableCache()->lockForUpdate()->findOrFail($data['order_id']);
 
-        if ($data['delivery_status'] === 'delivered' && \Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts')
-            && ($secure = \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $order->order_id)->first())) {
-            abort_unless($secure->state === 'committed' && ($order->payment_method !== 'online' || $order->payment_status === 'paid'), 409, 'Verified capture and a committed reservation are required before delivery.');
-        }
+            if ($data['delivery_status'] === 'delivered' && \Illuminate\Support\Facades\Schema::hasTable('storefront_checkouts')
+                && ($secure = \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $order->order_id)->lockForUpdate()->first())) {
+                abort_unless($secure->state === 'committed' && ($order->payment_method !== 'online' || $order->payment_status === 'paid'), 409, 'Verified capture and a committed reservation are required before delivery.');
+            }
 
-        if (in_array($data['delivery_status'], ['call', 'called', 'follow-up', 'delivered'])) {
-            DeliveryFollowup::create([
-                'order_id' => $data['order_id'],
-                'note' => $data['note'] ?? null,
-                'delivery_status' => $data['delivery_status'],
-            ]);
+            if (in_array($data['delivery_status'], ['call', 'called', 'follow-up', 'delivered'])) {
+                DeliveryFollowup::create([
+                    'order_id' => $data['order_id'],
+                    'note' => $data['note'] ?? null,
+                    'delivery_status' => $data['delivery_status'],
+                ]);
 
-            if ($data['delivery_status'] === 'delivered') {
-                $order->update(['status' => $data['delivery_status']]);
-                if (! empty($data['email'])) {
-                    Mail::to($data['email'])->send(new OrderDeliveredMail($order));
+                if ($data['delivery_status'] === 'delivered') {
+                    $order->update(['status' => $data['delivery_status']]);
+                    if (isset($secure) && $secure) {
+                        \App\Services\Storefront\Outbox::record('order.delivered:'.$order->order_id, 'order.delivered', ['order_id' => $order->order_id]);
+                    } elseif (! empty($data['email'])) {
+                        Mail::to($data['email'])->send(new OrderDeliveredMail($order));
+                    }
                 }
             }
-        }
 
-        $log_data = [
-            'order_id' => $data['order_id'],
-            'status' => $data['delivery_status'] === 'ontransist' ? 'ontransit' : $data['delivery_status'],
-            'changed_by' => 1,  // Admin
-            'remarks' => '',
-            'changed_at' => date('Y-m-d h:i:s'),
-        ];
-        if (! in_array($data['delivery_status'], ['call', 'called', 'follow-up'])) {
-            OrderStatusLog::create($log_data);
-        }
+            $log_data = [
+                'order_id' => $data['order_id'],
+                'status' => $data['delivery_status'] === 'ontransist' ? 'ontransit' : $data['delivery_status'],
+                'changed_by' => 1,  // Admin
+                'remarks' => '',
+                'changed_at' => date('Y-m-d h:i:s'),
+            ];
+            if (! in_array($data['delivery_status'], ['call', 'called', 'follow-up'])) {
+                OrderStatusLog::create($log_data);
+            }
 
-        return response()->json([
-            'success' => true,
-            'status' => ucfirst($data['delivery_status']),
-        ]);
+            return response()->json([
+                'success' => true,
+                'status' => ucfirst($data['delivery_status']),
+            ]);
+        }, 5);
     }
 
     public function get_followup_history($id)

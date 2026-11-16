@@ -95,6 +95,7 @@ final class PaymentService
 
     public function verify(object $attempt, string $paymentId, string $source): array
     {
+        CheckoutAccess::assertGateway();
         $payment = $this->gateway->payment($paymentId);
         $provider = $this->gateway->order($attempt->provider_order_id);
         abort_unless(($payment['id'] ?? null) === $paymentId && ($payment['order_id'] ?? null) === $attempt->provider_order_id
@@ -102,34 +103,40 @@ final class PaymentService
             && ($provider['id'] ?? null) === $attempt->provider_order_id && ($provider['amount'] ?? null) === (int) $attempt->amount_minor
             && ($provider['currency'] ?? null) === 'INR' && ($provider['receipt'] ?? null) === $attempt->id, 409, 'Payment amount, currency or order binding mismatch.');
         $state = $payment['status'] ?? '';
-        abort_unless(in_array($state, ['captured', 'authorized', 'failed']), 409, 'Payment has not reached a verifiable state.');
-        if ($state === 'captured') {
+        abort_unless(in_array($state, ['captured', 'refunded', 'authorized', 'failed']), 409, 'Payment has not reached a verifiable state.');
+        $captured = in_array($state, ['captured', 'refunded']);
+        $refunded = $payment['amount_refunded'] ?? 0;
+        abort_unless(is_int($refunded) && $refunded >= 0 && $refunded <= $attempt->amount_minor && ($state !== 'refunded' || $refunded > 0), 409, 'Invalid provider refunded balance.');
+        if ($captured) {
             abort_unless(($payment['captured'] ?? false) === true && ($provider['status'] ?? '') === 'paid'
                 && ($provider['amount_paid'] ?? null) === (int) $attempt->amount_minor && ($provider['amount_due'] ?? null) === 0, 409, 'Captured payment is not reconciled with the provider order.');
         }
-
-        return DB::transaction(function () use ($attempt, $payment, $state, $source, $provider) {
-            $orderRow = DB::table('orders')->where('order_id', $attempt->order_id)->first();
-            app(CheckoutService::class)->lockCustomer($orderRow->customer_id, false);
+        $result = DB::transaction(function () use ($attempt, $payment, $state, $source, $provider, $captured, $refunded) {
+            $customer = DB::table('orders')->where('order_id', $attempt->order_id)->value('customer_id');
+            app(CheckoutService::class)->lockCustomer($customer, false);
             $order = DB::table('orders')->where('order_id', $attempt->order_id)->lockForUpdate()->first();
             $checkout = DB::table('storefront_checkouts')->where('order_id', $attempt->order_id)->lockForUpdate()->first();
             $row = DB::table('storefront_payment_attempts')->where('id', $attempt->id)->lockForUpdate()->first();
             abort_unless($checkout && Money::minor($order->total_amount) === (int) $row->amount_minor, 409, 'Order amount changed; reconciliation is required.');
             if ($row->state === 'captured') {
-                abort_if($state === 'captured' && $row->provider_payment_id !== $payment['id'], 409, 'A second capture needs manual reconciliation.');
+                abort_if($captured && $row->provider_payment_id !== $payment['id'], 409, 'A second capture needs manual reconciliation.');
+                FinancialLedger::record($order->order_id, 'capture:'.$row->provider_payment_id, 'capture', $row->amount_minor);
 
-                return ['status' => 'success', 'paid' => true, 'order_id' => $order->order_id, 'requires_review' => $checkout->state === 'refund_required'];
+                return ['status' => 'success', 'paid' => true, 'order_id' => $order->order_id, 'requires_review' => in_array($checkout->state, ['refund_required', 'payment_review'])];
             }
             DB::table('storefront_payment_events')->insertOrIgnore(['event_key' => hash('sha256', $row->id.'|'.$payment['id'].'|'.$state),
                 'attempt_id' => $row->id, 'provider_payment_id' => $payment['id'], 'state' => $state, 'source' => $source,
                 'amount_minor' => $row->amount_minor, 'created_at' => now(), 'updated_at' => now()]);
-            if ($state === 'captured') {
-                $review = $checkout->state !== 'reserved' || $order->status === 'rejected';
+            if ($captured) {
+                $review = $checkout->state !== 'reserved' || $order->status === 'rejected' || $refunded > 0;
                 DB::table('storefront_payment_attempts')->where('id', $row->id)->update(['state' => 'captured', 'provider_payment_id' => $payment['id'], 'failure_code' => null, 'updated_at' => now()]);
                 DB::table('payments')->where('id', $row->legacy_payment_id)->update(['status' => 'paid', 'razorpay_payment_id' => $payment['id'], 'updated_at' => now()]);
                 DB::table('orders')->where('order_id', $order->order_id)->update(['payment_status' => 'paid', 'paid_at' => now(), 'updated_at' => now()]);
+                FinancialLedger::record($order->order_id, 'capture:'.$payment['id'], 'capture', $row->amount_minor);
                 if ($review) {
-                    DB::table('storefront_checkouts')->where('order_id', $order->order_id)->update(['state' => 'refund_required', 'updated_at' => now()]);
+                    $reviewState = $checkout->state === 'reserved' && $refunded > 0 ? 'payment_review' : 'refund_required';
+                    DB::table('storefront_checkouts')->where('order_id', $order->order_id)->update(['state' => $reviewState, 'updated_at' => now()]);
+                    OperationalAlert::record($reviewState, (string) $order->order_id);
                 } else {
                     app(CheckoutService::class)->commit($order->order_id);
                 }
@@ -149,6 +156,12 @@ final class PaymentService
 
             return ['status' => 'pending', 'paid' => false, 'order_id' => $order->order_id, 'message' => $state === 'failed' ? 'Payment failed. You may retry this order before its reservation expires.' : 'Capture is pending. Check order status before retrying.'];
         }, 5);
+        if ($captured && ($refunded > 0 || (int) $attempt->refunded_minor > 0)) {
+            $fresh = DB::table('storefront_payment_attempts')->where('id', $attempt->id)->first();
+            app(ProviderRefunds::class)->synchronize($fresh, $refunded);
+        }
+
+        return [...$result, 'provider_state' => $state, 'balance' => FinancialLedger::balance($attempt->order_id)];
     }
 
     public function reconcile(int $orderId): array
@@ -162,10 +175,14 @@ final class PaymentService
             $this->adoptProviderOrder($attempt, $found);
             $attempt = DB::table('storefront_payment_attempts')->where('order_id', $orderId)->first();
         }
+        // Reconcile the captured payment itself: an older failed retry must not hide its later refund state.
+        if ($attempt->state === 'captured' && $attempt->provider_payment_id) {
+            return $this->verify($attempt, $attempt->provider_payment_id, 'reconciliation');
+        }
         $payments = $this->gateway->orderPayments($attempt->provider_order_id);
-        usort($payments, fn ($a, $b) => (($b['status'] ?? '') === 'captured') <=> (($a['status'] ?? '') === 'captured'));
+        usort($payments, fn ($a, $b) => in_array($b['status'] ?? '', ['captured', 'refunded']) <=> in_array($a['status'] ?? '', ['captured', 'refunded']));
         foreach ($payments as $payment) {
-            if (in_array($payment['status'] ?? '', ['captured', 'authorized', 'failed'])) {
+            if (in_array($payment['status'] ?? '', ['captured', 'refunded', 'authorized', 'failed'])) {
                 $result = $this->verify($attempt, $payment['id'], 'reconciliation');
                 if ($result['paid']) {
                     return $result;
@@ -178,39 +195,6 @@ final class PaymentService
 
     public function webhook(string $raw, string $signature, string $eventId): array
     {
-        CheckoutAccess::assertGateway();
-        $secret = config('storefront.webhook_secret');
-        abort_unless(is_string($secret) && strlen($secret) >= 16, 503, 'Webhook verification is not configured.');
-        abort_unless(strlen($raw) <= 262144 && hash_equals(hash_hmac('sha256', $raw, $secret), $signature), 400, 'Invalid webhook signature.');
-        $body = json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
-        $hash = hash('sha256', $raw);
-        abort_unless(preg_match('/^[a-zA-Z0-9_-]{1,150}$/D', $eventId), 422, 'Invalid webhook event ID.');
-        $type = $body['event'] ?? '';
-        abort_unless(is_string($type) && strlen($type) <= 100, 422, 'Invalid event type.');
-        DB::table('storefront_webhook_events')->insertOrIgnore(['event_id' => $eventId, 'body_hash' => $hash, 'event_type' => $type, 'created_at' => now(), 'updated_at' => now()]);
-        $event = DB::table('storefront_webhook_events')->where('event_id', $eventId)->first();
-        if (! $event) {
-            $event = DB::table('storefront_webhook_events')->where('body_hash', $hash)->first();
-        }
-        abort_unless($event && hash_equals($event->body_hash, $hash), 409, 'Webhook event ID was reused with different content.');
-        if ($event->processed_at) {
-            return ['status' => 'success', 'duplicate' => true];
-        }
-        if (in_array($type, ['payment.captured', 'payment.authorized', 'payment.failed', 'order.paid'])) {
-            $entity = $body['payload']['payment']['entity'] ?? [];
-            $orderId = $entity['order_id'] ?? $body['payload']['order']['entity']['id'] ?? null;
-            $attempt = DB::table('storefront_payment_attempts')->where('provider_order_id', $orderId)->first();
-            abort_unless($attempt, 409, 'Payment mapping is not available yet. Retry this webhook.');
-            if (! empty($entity['id'])) {
-                $this->verify($attempt, $entity['id'], 'webhook');
-            } else {
-                $this->reconcile($attempt->order_id);
-            }
-        } elseif (in_array($type, ['refund.processed', 'refund.failed'])) {
-            app(RefundService::class)->reconcile($body['payload']['refund']['entity']['id'] ?? '');
-        }
-        DB::table('storefront_webhook_events')->where('event_id', $event->event_id)->update(['processed_at' => now(), 'updated_at' => now()]);
-
-        return ['status' => 'success', 'duplicate' => false];
+        return app(WebhookProcessor::class)->receive($raw, $signature, $eventId);
     }
 }

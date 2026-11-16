@@ -2,17 +2,17 @@
 import assert from 'node:assert/strict';
 const origin = process.env.SMOKE_ORIGIN || 'http://127.0.0.1:3000';
 const checks = [
-  ['/', 'A little more care.'],
-  ['/products', 'The everyday collection.'],
+  ['/', 'An everyday'],
+  ['/products', 'All pieces.'],
   ['/products?collection=offers', 'A little more value.'],
   ['/categories', 'Find your kind of everyday.'],
   ['/account', 'Your own little corner.'],
   ['/wishlist', 'Your favourites, gathered.'],
   ['/cart', 'Your shopping bag.'],
-  ['/shipping', 'approved delivery policy'],
-  ['/returns', 'Current return information from Vanthara.'],
-  ['/privacy', 'Awaiting approved business copy.'],
-  ['/terms', 'Awaiting approved business copy.'],
+  ['/shipping', 'Shipping'],
+  ['/returns', 'Return'],
+  ['/privacy', 'Privacy Policy'],
+  ['/terms', 'Terms'],
   ['/sitemap.xml', '<urlset'],
   ['/robots.txt', 'User-Agent: *'],
 ];
@@ -32,7 +32,7 @@ const search = await fetch(`${origin}/api/search?q=smoke-test-unique-keyword`);
 assert.equal(search.status, 200);
 assert.ok(Array.isArray((await search.json()).items));
 console.log('PASS same-origin search contract');
-const hero = await fetch(`${origin}/hero.webp`);
+const hero = await fetch(`${origin}/fashion/hero-campaign.webp`);
 assert.equal(hero.status, 200);
 assert.equal(hero.headers.get('content-type'), 'image/webp');
 console.log('PASS local hero asset');

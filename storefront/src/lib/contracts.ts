@@ -9,6 +9,7 @@ export const productSchema = z.object({
   stock: amount, size: text, weight: z.union([z.string(), z.number()]).nullable().optional(), unit: text, package_type: text,
   mrp: amount, retail: amount, wholesale: amount, special_price: amount, primary_price: text,
   primary_image: text, image_path: text, images: z.array(z.string()).optional(),
+  Description_images: z.array(z.string()).nullable().optional(),
   offer_price: amount, offer: z.object({ title: text, description: text }).nullable().optional(),
 });
 export type Product = z.infer<typeof productSchema>;
@@ -31,7 +32,7 @@ export const returnPolicySchema = z.object({
 });
 export type ReturnPolicy = z.infer<typeof returnPolicySchema>;
 export const topSellerSchema = z.object({ product: z.object({
-  product_name: z.string(), encrypted_product_id: z.string(), category_id: z.union([z.string(), z.number()]).optional(),
+  product_name: z.string(), encrypted_product_id: z.string(), category_id: z.union([z.string(), z.number()]).optional(), catalog_category: text,
 }).nullable() });
 
 export const envelope = <T extends z.ZodType>(schema: T) => z.object({ status: z.literal('success'), data: z.array(schema) });

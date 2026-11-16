@@ -1,0 +1,3 @@
+# TEMPLATE ONLY. Install only after staging deployment approval; run as service account.
+# APP_ENV=staging leaves storefront financial writes disabled. See the separate acceptance runbook.
+* * * * * cd /srv/vanthara/current && /usr/bin/php artisan schedule:run >> /srv/vanthara/shared/logs/scheduler.log 2>&1

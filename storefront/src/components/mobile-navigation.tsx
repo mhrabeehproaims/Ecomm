@@ -14,6 +14,7 @@ const destinations = [
 
 export function MobileNavigation() {
   const pathname = usePathname();
+  if (pathname.startsWith('/products/') || !['/', '/products', '/categories', '/wishlist', '/cart'].some(path => pathname === path || (path === '/categories' && pathname.startsWith('/categories/')))) return null;
   return <nav className="mobile-nav" aria-label="Mobile shopping navigation">{destinations.map(({ href, label, icon: Icon }) => {
     const active = pathname === href || (href === '/categories' && (pathname.startsWith('/categories/') || pathname.startsWith('/products')));
     return <Link href={href} key={href} aria-current={active ? 'page' : undefined}><Icon size={21} aria-hidden="true" /><span>{label}</span></Link>;

@@ -1,12 +1,13 @@
 'use client';
 export class CustomerClientError extends Error { constructor(message: string, public status: number) { super(message); } }
-export async function customerApi<T = Record<string, unknown>>(action: string, payload?: unknown): Promise<T> {
-  const response = await fetch(`/api/customer/${action}`, { method: payload === undefined ? 'GET' : 'POST', headers: payload === undefined ? undefined : { 'Content-Type': 'application/json' }, body: payload === undefined ? undefined : JSON.stringify(payload), cache: 'no-store' });
+export async function customerApi<T = Record<string, unknown>>(action: string, payload?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`/api/customer/${action}`, { method: payload === undefined ? 'GET' : 'POST', headers: payload === undefined ? undefined : { 'Content-Type': 'application/json' }, body: payload === undefined ? undefined : JSON.stringify(payload), cache: 'no-store', signal });
   const body = await response.json();
   if (!response.ok) {
     const details = body.errors ? Object.values(body.errors).flat().filter(Boolean).join(' ') : '';
     throw new CustomerClientError(details || body.message || 'Please try again.', response.status);
   }
+  if (payload !== undefined && typeof window !== 'undefined') window.dispatchEvent(new Event('vanthara:customer-updated'));
   return body as T;
 }
 export function safeNextPath(value: string | null) {

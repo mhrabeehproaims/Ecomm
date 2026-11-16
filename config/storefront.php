@@ -14,4 +14,5 @@ return [
     'razorpay_key' => env('STOREFRONT_RAZORPAY_TEST_KEY', ''),
     'razorpay_secret' => env('STOREFRONT_RAZORPAY_TEST_SECRET', ''),
     'webhook_secret' => env('STOREFRONT_RAZORPAY_WEBHOOK_SECRET', ''),
+    'previous_webhook_secrets' => json_decode(env('STOREFRONT_RAZORPAY_PREVIOUS_WEBHOOK_SECRETS', '[]'), true) ?: [],
 ];

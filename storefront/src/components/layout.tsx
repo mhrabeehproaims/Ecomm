@@ -1,51 +1,31 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Suspense } from 'react';
-import { ArrowUpRight, Grid2X2, Heart, Leaf, ShoppingBag, UserRound } from 'lucide-react';
-import { getCategories } from '@/lib/api';
-import { SearchBox } from './search';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { getCategories, getProducts } from '@/lib/api';
+import { footerInformation, footerServices, mapHref, publicContact } from '@/lib/public-site';
+import { FashionHeader } from './fashion-header';
 import { MobileNavigation } from './mobile-navigation';
 
-async function CategoryLinks() {
-  const result = await getCategories();
-  const categories = result.ok ? result.data.data : [];
-  return categories.slice(0, 5).map(c => <Link key={c.name} href={`/categories/${encodeURIComponent(c.name)}`}>{c.name}</Link>);
-}
-
-export function Header() {
-  return <>
-    <div className="announcement"><span>A little more thought. A little more everyday.</span><Link href="/about">Meet Vanthara <ArrowUpRight size={13} /></Link></div>
-    <header className="site-header">
-      <div className="container header-main">
-        <Link href="/" className="brand" aria-label="Vanthara home"><Image src="/vantara-logo.png" alt="Vanthara" width={172} height={56} priority /></Link>
-        <SearchBox />
-        <nav className="header-actions" aria-label="Shopping shortcuts">
-          <Link href="/account" aria-label="Your account"><UserRound size={21} aria-hidden="true" /><span>Account</span></Link>
-          <Link href="/wishlist" aria-label="Your wishlist"><Heart size={21} aria-hidden="true" /><span>Wishlist</span></Link>
-          <Link href="/cart" aria-label="Your shopping bag"><ShoppingBag size={21} aria-hidden="true" /><span>Bag</span></Link>
-        </nav>
-      </div>
-      <div className="nav-border"><nav className="container category-nav" aria-label="Main navigation">
-        <Link href="/categories" className="all-categories"><Grid2X2 size={17} />All categories</Link>
-        <Link href="/products">Shop all</Link>
-        <Suspense fallback={null}><CategoryLinks /></Suspense>
-        <Link href="/products?collection=offers">Special offers</Link>
-        <Link href="/wholesale" className="nav-wholesale">Wholesale enquiries <ArrowUpRight size={14} /></Link>
-      </nav></div>
-    </header>
-  </>;
+export async function Header() {
+  const [categories, products] = await Promise.all([getCategories(), getProducts()]);
+  const active = products.ok ? products.data.data : [];
+  const collections = categories.ok ? categories.data.data.map(category => ({ name: category.name, subcategories: [...new Set(active.filter(product => product.category === category.name).map(product => product.sub_category).filter((name): name is string => !!name))] })) : [];
+  return <FashionHeader collections={collections} />;
 }
 
 export function Footer() {
   return <>
     <footer className="footer">
       <div className="container footer-main">
-        <div className="footer-story"><Image src="/vantara-logo.png" alt="Vanthara" width={156} height={51} /><p>Thoughtful discoveries.<br />For the way you live, every day.</p><Link href="/about">Get to know us <ArrowUpRight size={15} /></Link></div>
-        <div><h2>Discover</h2><Link href="/products">Shop all products</Link><Link href="/categories">Our categories</Link><Link href="/products?collection=offers">Special offers</Link><Link href="/wholesale">Shop for your business</Link></div>
-        <div><h2>Here to help</h2><Link href="/contact">Contact us</Link><Link href="/faq">Common questions</Link><Link href="/shipping">Shipping information</Link><Link href="/returns">Returns & refunds</Link></div>
-        <div className="footer-note"><Leaf size={24} strokeWidth={1.3} /><h2>Everyday, considered.</h2><p>Take a moment. Explore the details. Find what feels right for you.</p></div>
+        <div className="footer-contact"><Link href="/" aria-label="Vanthara home"><Image src="/vantara-logo.png" alt="Vanthara" width={98} height={32} /></Link><p className="footer-brand-description">A considered point of view.<br />Discover the Vanthara collection.</p><address>{publicContact.address}</address><a href={mapHref} target="_blank" rel="noopener noreferrer" className="footer-direction">GET DIRECTION <ArrowUpRight size={14} /></a><a href={`mailto:${publicContact.email}`}>{publicContact.email}</a><a href={`tel:${publicContact.telephone}`}>{publicContact.phone}</a>
+          <div className="footer-socials" aria-label="Social profiles">{['facebook', 'twitter', 'instagram', 'tiktok', 'pinterest'].map(network => <span key={network} className="footer-social-unavailable" role="img" aria-label={`${network}: official profile link unavailable`} title={`Official ${network} profile link has not been published`}><Image src={`/social/${network}.svg`} alt="" aria-hidden="true" width={14} height={14} /></span>)}</div>
+        </div>
+        <nav aria-label="Footer shopping"><h2>The collection</h2><Link href="/products?sort=newest">New arrivals</Link><Link href="/products">Shop all pieces</Link><Link href="/categories">Collections</Link></nav>
+        <nav aria-label="Footer information"><h2>Information</h2>{footerInformation.map(link => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav>
+        <nav aria-label="Footer customer services"><h2>Customer Services</h2>{footerServices.map(link => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav>
+        <section className="footer-subscribe" aria-labelledby="footer-subscribe-title"><h2 id="footer-subscribe-title">Sign up for your purchase</h2><div className="footer-email-control"><input type="email" placeholder="Enter your e-mail" aria-label="Newsletter email address" aria-describedby="newsletter-availability" disabled /><button type="button" aria-label="Newsletter subscription unavailable" disabled><ArrowRight size={21} /></button></div><p id="newsletter-availability" className="footer-availability">Newsletter sign-up is currently unavailable.</p><p className="footer-consent"><input type="checkbox" aria-label="Agree to subscription terms" disabled /><span>By clicking subscribe, you agree to the <Link href="/terms-conditions">Terms of Service</Link> and <Link href="/privacy-policy">Privacy Policy</Link>.</span></p></section>
       </div>
-      <div className="container footer-bottom"><span>© {new Date().getFullYear()} Vanthara</span><div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms & conditions</Link></div><span>Made for your everyday.</span></div>
+      <div className="container footer-bottom"><span>©{new Date().getFullYear()} Vanthara. All Rights Reserved.</span><span>INR ₹ <span aria-hidden="true"> · </span> English</span></div>
     </footer>
     <MobileNavigation />
   </>;

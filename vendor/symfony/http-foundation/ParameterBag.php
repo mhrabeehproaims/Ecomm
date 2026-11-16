@@ -23,6 +23,9 @@ use Symfony\Component\HttpFoundation\Exception\UnexpectedValueException;
  */
 class ParameterBag implements \IteratorAggregate, \Countable
 {
+    /**
+     * @param array<string, mixed> $parameters
+     */
     public function __construct(
         protected array $parameters = [],
     ) {
@@ -31,7 +34,11 @@ class ParameterBag implements \IteratorAggregate, \Countable
     /**
      * Returns the parameters.
      *
-     * @param string|null $key The name of the parameter to return or null to get them all
+     * @template TKey of string|null
+     *
+     * @param TKey $key The name of the parameter to return or null to get them all
+     *
+     * @return (TKey is null ? array<string, mixed> : array<mixed>)
      *
      * @throws BadRequestException if the value is not an array
      */
@@ -50,6 +57,8 @@ class ParameterBag implements \IteratorAggregate, \Countable
 
     /**
      * Returns the parameter keys.
+     *
+     * @return list<string>
      */
     public function keys(): array
     {
@@ -58,6 +67,8 @@ class ParameterBag implements \IteratorAggregate, \Countable
 
     /**
      * Replaces the current parameters by a new set.
+     *
+     * @param array<string, mixed> $parameters
      */
     public function replace(array $parameters = []): void
     {
@@ -66,6 +77,8 @@ class ParameterBag implements \IteratorAggregate, \Countable
 
     /**
      * Adds parameters.
+     *
+     * @param array<string, mixed> $parameters
      */
     public function add(array $parameters = []): void
     {
@@ -188,7 +201,7 @@ class ParameterBag implements \IteratorAggregate, \Countable
         try {
             return $class::from($value);
         } catch (\ValueError|\TypeError $e) {
-            throw new UnexpectedValueException(\sprintf('Parameter "%s" cannot be converted to enum: %s.', $key, $e->getMessage()), $e->getCode(), $e);
+            throw new UnexpectedValueException(\sprintf('Parameter "%s" cannot be converted to enum: ', $key).$e->getMessage().'.', $e->getCode(), $e);
         }
     }
 
@@ -229,9 +242,26 @@ class ParameterBag implements \IteratorAggregate, \Countable
         $nullOnFailure = $options['flags'] & \FILTER_NULL_ON_FAILURE;
         $options['flags'] |= \FILTER_NULL_ON_FAILURE;
 
-        $value = filter_var($value, $filter, $options);
+        $invalid = false;
+        $forceArray = !\is_array($value) && ($options['flags'] & \FILTER_FORCE_ARRAY) && !($options['flags'] & \FILTER_REQUIRE_ARRAY);
 
-        if (null !== $value || $nullOnFailure) {
+        if (!$nullOnFailure && \is_array($value) && $value && !($options['flags'] & \FILTER_REQUIRE_SCALAR) && ($options['flags'] & (\FILTER_REQUIRE_ARRAY | \FILTER_FORCE_ARRAY))) {
+            $options['flags'] &= ~(\FILTER_REQUIRE_ARRAY | \FILTER_FORCE_ARRAY);
+            $value = self::filterArray($value, $filter, $options, $invalid);
+        } else {
+            if ($forceArray) {
+                $options['flags'] &= ~\FILTER_FORCE_ARRAY;
+            }
+
+            $value = filter_var($value, $filter, $options);
+            $invalid = null === $value;
+
+            if ($forceArray) {
+                $value = [$value];
+            }
+        }
+
+        if (!$invalid || $nullOnFailure) {
             return $value;
         }
 
@@ -254,5 +284,32 @@ class ParameterBag implements \IteratorAggregate, \Countable
     public function count(): int
     {
         return \count($this->parameters);
+    }
+
+    private static function filterArray(array $value, int $filter, array $options, bool &$invalid, array &$references = []): array
+    {
+        foreach ($value as $key => $item) {
+            if (!\is_array($item)) {
+                $value[$key] = filter_var($item, $filter, $options);
+                $invalid = $invalid || null === $value[$key];
+                continue;
+            }
+
+            $id = \ReflectionReference::fromArrayElement($value, $key)?->getId();
+            if (null !== $id && isset($references[$id])) {
+                continue;
+            }
+            if (null !== $id) {
+                $references[$id] = true;
+            }
+
+            $value[$key] = self::filterArray($item, $filter, $options, $invalid, $references);
+
+            if (null !== $id) {
+                unset($references[$id]);
+            }
+        }
+
+        return $value;
     }
 }

@@ -1,8 +1,8 @@
 <?php
 
-use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\AuthControllerAdmin;
 use App\Http\Controllers\BannerController;
 use App\Http\Controllers\BrandController;
@@ -27,10 +27,9 @@ use App\Http\Controllers\UnitController;
 use App\Http\Controllers\WeightController;
 use App\Http\Controllers\WholesaleEnquiryController;
 use App\Http\Controllers\WishlistWebController;
-use App\Http\Middleware\AuthMiddleware;
 use Illuminate\Support\Facades\Route;
 
-if (!auth()->check()) {
+if (! auth()->check()) {
     Route::get('/', [AuthControllerAdmin::class, 'index'])->name('login.index')->middleware('guest');
 } else {
     return redirect()->route('home');
@@ -84,6 +83,7 @@ Route::middleware('AuthMiddleware')->group(function () {
     Route::get('get-orders', [OrderController::class, 'getOrders'])->name('orders.getOrders');
     Route::get('order-details/{id}', [OrderController::class, 'show'])->name('order.show');
     Route::put('update-order-status/{id}', [OrderController::class, 'update_status']);
+    Route::post('orders/{order}/cod-receipt', [\App\Http\Controllers\CodAccountingController::class, 'store'])->whereNumber('order')->name('orders.cod-receipt');
 
     // wishlist
     Route::get('wishlist', [WishlistWebController::class, 'index'])->name('web.wishlist.index');
@@ -124,17 +124,8 @@ Route::middleware('AuthMiddleware')->group(function () {
     Route::get('logout', [AuthControllerAdmin::class, 'logout'])->name('logout');
 });
 
-Route::get('/download-invoice/{filename}', function ($filename) {
-    $path = storage_path('app/public/Invoices/' . $filename);
-
-    if (!file_exists($path)) {
-        abort(404);
-    }
-
-    return response()->download($path, $filename, [
-        'Content-Type' => 'application/pdf',
-    ]);
-})->name('download.invoice');
+Route::get('/download-invoice/{filename}', [\App\Http\Controllers\OrderDocumentController::class, 'invoice'])->name('download.invoice');
+Route::get('/download-packing-slip/{filename}', [\App\Http\Controllers\OrderDocumentController::class, 'packingSlip'])->name('download.packing-slip');
 
 // Route::get('/razorpay', [PaymentController::class, 'index']);
 // Route::post('/razorpay/payment', [PaymentController::class, 'payment'])->name('razorpay.payment');

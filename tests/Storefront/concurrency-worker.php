@@ -25,6 +25,17 @@ try {
     } elseif ($mode === 'replace') {
         app(App\Services\Storefront\ReturnService::class)->transition((int) $reference, 'replaced');
         $result = ['order_id' => DB::table('sales_returns')->where('return_id', $reference)->value('reissued_order_id')];
+    } elseif ($mode === 'refund-observe') {
+        $attempt = DB::table('storefront_payment_attempts')->where('order_id', $reference)->first();
+        $data = json_decode($key, true, flags: JSON_THROW_ON_ERROR);
+        $fake = new Tests\Support\FakeStorefrontGateway;
+        $fake->refunds[$data['id']] = ['id' => $data['id'], 'payment_id' => $attempt->provider_payment_id, 'amount' => $data['amount'], 'currency' => 'INR', 'status' => 'processed'];
+        $app->instance(App\Services\Storefront\PaymentGateway::class, $fake);
+        $result = app(App\Services\Storefront\ProviderRefunds::class)->observe($data['id']);
+    } elseif ($mode === 'cod-collect') {
+        $data = json_decode($key, true, flags: JSON_THROW_ON_ERROR);
+        app(App\Services\Storefront\CodAccounting::class)->record((int) $reference, $data['amount'], $data['key'], $data['evidence'], $data['actor']);
+        $result = ['order_id' => (int) $reference];
     } else {
         $attempt = DB::table('storefront_payment_attempts')->where('order_id', $reference)->first();
         $fake = new Tests\Support\FakeStorefrontGateway;

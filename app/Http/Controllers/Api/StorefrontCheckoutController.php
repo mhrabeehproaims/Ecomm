@@ -18,7 +18,7 @@ final class StorefrontCheckoutController extends Controller
     {
         return response()->json(['checkoutEnabled' => CheckoutAccess::enabled(), 'testMode' => true,
             'paymentTestConfigured' => str_starts_with(config('storefront.razorpay_key', ''), 'rzp_test_') && strlen(config('storefront.razorpay_secret', '')) >= 8,
-            'codEnabled' => config('storefront.cod_enabled')]);
+            'codEnabled' => (bool) config('storefront.cod_enabled', false)]);
     }
 
     public function quote(Request $request, CheckoutService $service)

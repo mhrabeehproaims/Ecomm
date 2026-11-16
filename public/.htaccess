@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # Financial PDFs are private, including historical copies behind storage:link.
+    RewriteRule ^storage/(Invoices|PackingSlips)(/|$) - [R=404,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

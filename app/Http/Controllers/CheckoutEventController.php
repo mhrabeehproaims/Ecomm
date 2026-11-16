@@ -4,19 +4,37 @@ namespace App\Http\Controllers;
 
 use App\Models\Cart;
 use App\Models\CheckoutEvent;
-use App\Models\Customer;
-use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CheckoutEventController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        // $carts = Customer::with(['wishlist' => fn($qry) => $qry->orderBy('created_at', 'desc')])->get();
-        $customers = Customer::all();
-        $products = Product::where('status', 1)->get();
-        $cart_products = Cart::with('customer', 'product')->orderBy('created_at', 'desc')->get();
-        return view('Cart.carts', compact('cart_products', 'customers', 'products'));
+        $filters = $this->cartFilters($request);
+        $cart_products = Cart::with(['customer', 'product.primaryImage', 'product.size'])
+            ->when($filters['customer'] ?? null, fn ($query, $customer) => $query->where('user_id', $customer))
+            ->when($filters['product'] ?? null, fn ($query, $product) => $query->where('product_id', $product))
+            ->orderByDesc('updated_at')->orderByDesc('cart_id')->paginate(25)->withQueryString();
+
+        // Use uncached membership queries: cart writes must appear immediately.
+        $customers = DB::table('customers')->whereExists(fn ($query) => $query->selectRaw('1')
+            ->from('carts')->whereColumn('carts.user_id', 'customers.customer_id'))
+            ->orderBy('first_name')->orderBy('last_name')->get(['customer_id', 'first_name', 'last_name', 'phone']);
+        $products = DB::table('products')->whereExists(fn ($query) => $query->selectRaw('1')
+            ->from('carts')->whereColumn('carts.product_id', 'products.product_id'))
+            ->orderBy('product_name')->get(['product_id', 'product_name', 'status']);
+
+        return response()->view('Cart.carts', compact('cart_products', 'customers', 'products', 'filters'))
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    private function cartFilters(Request $request): array
+    {
+        return array_filter($request->validate([
+            'customer' => ['nullable', 'integer', 'exists:customers,customer_id'],
+            'product' => ['nullable', 'integer', 'exists:products,product_id'],
+        ]), fn ($value) => $value !== null && $value !== '');
     }
 
     public function checkoutClick(Request $request)
@@ -39,38 +57,8 @@ class CheckoutEventController extends Controller
 
     public function get_carts_byCustomer(Request $request)
     {
-        $customer_id = $request->customer;
-        $product_id = $request->product;
-        // return [$customer_id, $product_id];
-        $customers = Customer::all();
-        $products = Product::where('status', 1)->get();
-
-        if ($customer_id && !$product_id) {
-            $carts = Customer::with(['carts' => fn($qry) => $qry->orderBy('created_at', 'asc')])->where('customer_id', $customer_id)->first();
-            // return $carts;
-            return view('Cart.cartFilter', compact('carts', 'customers', 'products', 'customer_id', 'product_id'));
-        }
-
-        if (!$customer_id && $product_id) {
-            $carts = Product::with('carts.customer')->find($product_id);
-            // return $carts->product_name;
-            return view('Cart.customersByProduct', compact('carts', 'customers', 'products', 'product_id'));
-        }
-
-        if ($customer_id && $product_id) {
-            $carts = Product::where('product_id', $product_id)
-                ->whereHas('carts', function ($q) use ($customer_id) {
-                    $q->where('user_id', $customer_id);
-                })
-                ->with([
-                    'carts' => function ($q) use ($customer_id) {
-                        $q->where('user_id', $customer_id)
-                            ->orderBy('created_at', 'asc');
-                    }
-                ])
-                ->first();
-            return view('Cart.customersByProduct', compact('carts', 'customer_id', 'customers', 'products', 'product_id'));
-        }
+        // Preserve existing form links while using one consistent, bookmarkable listing.
+        return redirect()->route('web.carts.index', $this->cartFilters($request));
     }
     public function show($id)
     {

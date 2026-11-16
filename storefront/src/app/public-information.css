@@ -1,0 +1,99 @@
+.footer { background: #fff; }
+.footer .footer-main { display: grid; grid-template-columns: 1.3fr .8fr 1fr 2fr; gap: 36px; padding-block: 54px 40px; }
+.footer .footer-main > * { min-width: 0; }
+.footer .footer-main h2 { margin: 0 0 18px; font: 600 16px/1.5 system-ui, sans-serif; color: var(--ink); }
+.footer .footer-main a { color: var(--ink); font-size: 15px; font-weight: 400; min-height: 36px; }
+.footer .footer-main a:hover { color: var(--plum); }
+.footer .footer-contact > a:first-child { display: inline-flex; margin-bottom: 18px; }
+.footer .footer-contact address { font-size: 15px; font-style: normal; line-height: 1.7; max-width: 280px; }
+.footer .footer-main .footer-direction { font-weight: 600; margin-bottom: 12px; }
+.footer-socials { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.footer-social-unavailable { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; }
+.footer-social-unavailable img { width: 14px; height: 14px; }
+.footer .footer-subscribe h2 { font-weight: 400; }
+.footer-email-control { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 7px 4px 20px; min-height: 48px; border: 1px solid var(--line); border-radius: 28px; }
+.footer-email-control input { flex: 1; width: 100%; min-width: 0; border: 0; font-size: 15px; padding: 6px 0; background: transparent; color: var(--muted); }
+.footer-email-control button { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 0; border-radius: 50%; color: white; background: var(--forest); cursor: not-allowed; }
+.footer .footer-main .footer-availability { font-size: 12px; color: var(--muted); margin: 8px 0 12px; }
+.footer .footer-main .footer-consent { display: flex; align-items: start; gap: 10px; margin: 0; font-size: 14px; color: var(--ink); }
+.footer-consent > input { margin-top: 5px; flex-shrink: 0; width: 14px; height: 14px; }
+.footer .footer-main .footer-consent a { display: inline; min-height: auto; font-size: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.footer .footer-bottom { color: var(--muted); font-size: 12px; }
+.footer .footer-main h2 { font-size: 16px; }
+.footer .footer-main a { color: var(--ink); font-size: 15px; }
+.footer .footer-main a:hover { color: var(--plum); }
+.footer .footer-bottom > span:last-child { display: inline; }
+.public-page { padding-block: 48px 70px; min-height: 520px; }
+.public-page h1 { margin: 0 0 36px; font-size: clamp(32px, 4vw, 46px); line-height: 1.2; }
+.public-page h2 { font-size: 26px; line-height: 1.35; margin: 0 0 20px; }
+.public-page p { font-size: 15px; line-height: 1.9; }
+.about-introduction { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); align-items: start; gap: 40px; }
+.about-visual { overflow: hidden; border-radius: var(--radius); }
+.about-visual img { display: block; width: 100%; height: auto; aspect-ratio: 5 / 4; object-fit: cover; }
+.about-tabs [role=tablist] { display: flex; flex-wrap: wrap; gap: 0 12px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.about-tabs [role=tab] { min-height: 44px; padding: 10px 0; border: 0; border-bottom: 2px solid transparent; background: transparent; font-size: 13px; }
+.about-tabs [role=tab][aria-selected=true] { border-bottom-color: var(--plum); color: var(--plum); font-weight: 600; }
+.about-tabs [role=tabpanel] p + p { margin-top: 16px; }
+.about-benefits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin-top: 46px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); }
+.about-benefits h3 { font: 600 16px/1.5 system-ui, sans-serif; margin-bottom: 8px; }
+.about-benefits p { color: var(--muted); font-size: 13px; }
+.about-reviews { margin-top: 46px; }
+.about-reviews > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.about-reviews article { padding: 24px; background: var(--cream); border-radius: var(--radius); }
+.about-reviews h3 { font-size: 21px; margin-bottom: 16px; }
+.about-reviews article p { margin-bottom: 20px; }
+.review-stars { display: block; color: var(--forest); letter-spacing: .15em; margin-top: 8px; }
+.published-policy-sections,.faq-list { max-width: 850px; }
+.published-policy-sections > section { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 24px; overflow: hidden; }
+.published-policy-sections header { padding: 20px 24px; border-bottom: 1px solid var(--line); background: #f7f7f2; }
+.published-policy-sections header h2 { font: 600 19px/1.4 system-ui, sans-serif; margin-bottom: 0; }
+.published-policy-sections header .policy-estimate { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.published-policy-copy { padding: 20px 24px; }
+.published-policy-copy p { white-space: pre-line; }
+.published-policy-copy p + p,.published-policy-copy ul { margin-top: 16px; }
+.published-policy-copy ul { padding-left: 22px; font-size: 15px; line-height: 1.9; list-style: disc; }
+.faq-list details { border-bottom: 1px solid var(--line); }
+.faq-list summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 4px; min-height: 56px; font-weight: 600; list-style: none; }
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary::after { content: '+'; flex-shrink: 0; font-size: 23px; color: var(--forest); }
+.faq-list details[open] summary::after { content: '−'; }
+.faq-list details p { padding: 0 4px 22px; max-width: 760px; color: var(--muted); }
+.contact-information-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+.contact-map,.contact-information { padding: 32px; border: 1px solid var(--line); border-radius: var(--radius); }
+.contact-map { display: flex; align-items: start; justify-content: center; flex-direction: column; gap: 18px; background: var(--cream); color: var(--forest); }
+.contact-map h2 { margin-bottom: 0; }
+.contact-information p + p { margin-top: 16px; }
+.contact-information a { display: inline-flex; align-items: center; gap: 8px; color: var(--plum); overflow-wrap: anywhere; }
+.contact-message { max-width: 760px; margin: 54px auto 0; }
+.contact-message > h2,.contact-message > p { text-align: center; }
+.contact-message > p { margin-bottom: 28px; color: var(--muted); }
+.contact-form { padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); }
+.contact-form .button { justify-self: center; min-width: 190px; border-radius: 30px; }
+.contact-form textarea { min-height: 140px; resize: vertical; }
+.public-page.returns-page { max-width: 900px; }
+.return-account-link { margin-top: 28px; }
+.return-account-link a { color: var(--plum); text-decoration: underline; }
+.stories-unavailable { padding: 34px; border: 1px solid var(--line); border-radius: var(--radius); max-width: 760px; }
+.stories-unavailable p { margin-bottom: 24px; }
+@media (max-width: 1100px) {
+  .footer .footer-main { grid-template-columns: 1.1fr .85fr 1fr; gap: 28px; }
+  .footer .footer-subscribe { grid-column: 1 / -1; max-width: 650px; }
+  .about-introduction { gap: 28px; }
+}
+@media (max-width: 767px) {
+  .footer .footer-main { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 18px; padding-block: 36px; }
+  .footer .footer-contact,.footer .footer-subscribe { grid-column: 1 / -1; }
+  .footer .footer-main a { min-height: 44px; font-size: 14px; }
+  .footer .footer-main .footer-consent a { min-height: auto; }
+  .footer .footer-bottom > span:last-child { display: inline; }
+  .public-page { padding-block: 32px 48px; }
+  .public-page h1 { margin-bottom: 26px; }
+  .public-page h2 { font-size: 25px; }
+  .about-introduction,.contact-information-grid,.about-reviews > div { grid-template-columns: minmax(0, 1fr); }
+  .about-visual img { aspect-ratio: 16 / 10; }
+  .about-benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 22px; gap: 20px; }
+  .contact-map,.contact-information,.contact-form,.stories-unavailable { padding: 22px; }
+  .contact-form .form-columns { grid-template-columns: minmax(0, 1fr); }
+  .published-policy-sections header,.published-policy-copy { padding: 18px 20px; }
+  .public-page .published-policy-sections header h2 { font-size: 18px; }
+}

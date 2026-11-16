@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { apiOrigin, siteOrigin } from '@/lib/config';
+import { customerShopping } from '@/lib/customer-shopping';
+import { customerOriginAllowed } from '@/lib/customer-origin';
 import { getProduct, getProducts } from '@/lib/api';
 import { activeRecommendations } from '@/lib/catalog';
 import { productSchema } from '@/lib/contracts';
@@ -36,12 +38,34 @@ async function sandbox() { if (!await isolatedTransactionsEnabled()) throw new C
 export async function GET(request: NextRequest, context: Context) {
   try {
     const { action } = await context.params;
+    if (action === 'shopping-state') {
+      const token = await tokenFromCookie();
+      if (!token) throw new CustomerError(401, 'Please sign in to continue.');
+      return json(await customerShopping(token));
+    }
+    if (action === 'shopping-summary') {
+      const token = await tokenFromCookie();
+      if (!token) return json({ signedIn: false, cartCount: 0, wishlist: [] });
+      try {
+        return json((await customerShopping(token)).summary);
+      } catch (error) {
+        if (error instanceof CustomerError && [401, 403].includes(error.status)) return json({ signedIn: false, cartCount: 0, wishlist: [] });
+        throw error;
+      }
+    }
     if (action === 'capabilities') {
       const enabled = await isolatedTransactionsEnabled();
       const capabilities = enabled ? await customerRequest('checkout/capabilities', null) : {};
       return json({ sandboxCheckout: enabled, paymentTestConfigured: enabled && capabilities.paymentTestConfigured === true, codEnabled: enabled && capabilities.codEnabled === true });
     }
     const { token, customer } = await auth();
+    if (action === 'document') {
+      const orderId = id.parse(Number(request.nextUrl.searchParams.get('order_id')));
+      const kind = z.enum(['invoice', 'packing-slip']).parse(request.nextUrl.searchParams.get('kind') || 'invoice');
+      const document = await fetch(`${apiOrigin}/api/orders/${orderId}/documents/${kind}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(12_000) });
+      if (!document.ok || !document.headers.get('content-type')?.startsWith('application/pdf')) throw new CustomerError(404, 'Document not available.');
+      return new NextResponse(await document.arrayBuffer(), { headers: { ...privateHeaders, 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${kind}-${orderId}.pdf"`, 'X-Content-Type-Options': 'nosniff' } });
+    }
     if (action === 'session') return json({ customer });
     if (action === 'cart') return json({ items: await customerCart(token) });
     if (action === 'wishlist') {
@@ -60,7 +84,7 @@ export async function GET(request: NextRequest, context: Context) {
 
 export async function POST(request: NextRequest, context: Context) {
   try {
-    if (request.headers.get('origin') !== siteOrigin || !request.headers.get('content-type')?.startsWith('application/json')) return json({ message: 'This request could not be verified.' }, 403);
+    if (!customerOriginAllowed(request.headers.get('origin'), siteOrigin, process.env.NODE_ENV === 'development') || !request.headers.get('content-type')?.startsWith('application/json')) return json({ message: 'This request could not be verified.' }, 403);
     const text = await request.text();
     if (text.length > 16_384) return json({ message: 'The request is too large.' }, 413);
     let input: unknown;
@@ -174,7 +198,7 @@ export async function POST(request: NextRequest, context: Context) {
       await sandbox();
       const { order_id } = z.object({ order_id: id }).parse(input);
       const order = (await customerOrders(token)).find(o => o.order_id === order_id);
-      if (!order || order.payment_status === 'paid') throw new CustomerError(422, 'This order is not payable.');
+      if (!order || order.checkout_state !== 'reserved' || ['paid', 'refunded', 'partially_refunded'].includes(order.payment_status || '')) throw new CustomerError(422, 'This order is not payable.');
       const result = await customerRequest('razorpay/payment', token, 'POST', { order_id });
       const key = z.string().regex(/^rzp_test_/).parse(result.razorpayKey);
       const providerId = z.string().min(1).parse(result.razorpayOrderId);
@@ -195,8 +219,8 @@ export async function POST(request: NextRequest, context: Context) {
       const verified = await customerRequest(action === 'payment-confirm' ? 'razorpay/success' : 'razorpay/failed', token, 'POST', data);
       if (verified.paid !== true) return json({ paid: false, message: verified.message || 'Payment is pending. Check your order status before retrying.' }, 202);
       const order = (await customerOrders(token)).find(o => o.order_id === binding.order_id);
-      if (order?.payment_status !== 'paid') throw new CustomerError(409, 'Payment has not been confirmed by the backend.');
-      const response = json({ order, paid: true, requires_review: verified.requires_review === true });
+      if (!order || !['paid', 'refunded', 'partially_refunded'].includes(order.payment_status || '')) throw new CustomerError(409, 'Payment has not been confirmed by the backend.');
+      const response = json({ order, paid: true, payment_status: order.payment_status, requires_review: verified.requires_review === true });
       response.cookies.set('vanthara_payment', '', { httpOnly: true, secure: new URL(siteOrigin).protocol === 'https:', sameSite: 'lax', path: '/', maxAge: 0 });
       return response;
     }

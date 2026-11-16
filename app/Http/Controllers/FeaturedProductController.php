@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\FeaturedProduct;
-use App\Models\Product;
 use Illuminate\Http\Request;
 
 class FeaturedProductController extends Controller
@@ -16,6 +15,7 @@ class FeaturedProductController extends Controller
     {
         $categories = Category::where('status', 1)->get();
         $featureds = FeaturedProduct::with('product')->get();
+
         return view('Featured_prodcuts.featured_prods', compact('categories', 'featureds'));
         // return $products;
     }
@@ -23,16 +23,16 @@ class FeaturedProductController extends Controller
     public function store(Request $request)
     {
         $valid_data = $request->validate([
-            'selected_products'   => 'required|array',
+            'selected_products' => 'required|array',
             'selected_products.*' => 'distinct|exists:products,product_id|unique:featured_products,product_id',
-            'status'              => 'nullable|boolean'
+            'status' => 'nullable|boolean',
         ]);
 
         $data = [];
         foreach ($valid_data['selected_products'] as $pid) {
             $data[] = FeaturedProduct::create([
                 'product_id' => $pid,
-                'status'     => $valid_data['status'] ?? 1,
+                'status' => $valid_data['status'] ?? 1,
             ]);
         }
 
@@ -42,17 +42,13 @@ class FeaturedProductController extends Controller
 
         return response()->json([
             'message' => 'success',
-            'data'    => $featured
+            'data' => $featured,
         ]);
     }
-
 
     /**
      * Display the specified resource.
      */
-
-
-
 
     /**
      * Remove the specified resource from storage.
@@ -62,6 +58,7 @@ class FeaturedProductController extends Controller
         $ids = $request->ids;
 
         FeaturedProduct::whereIn('featured_id', $ids)->delete();
+        app(\App\Services\Storefront\CatalogInvalidation::class)->changed();
 
         return response()->json(['status' => 'success']);
     }

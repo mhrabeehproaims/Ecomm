@@ -206,12 +206,9 @@
             <div class="message">
                 <p>
                     Great news! Your order has been dispatched and is now on its way to you.
-                    You can expect delivery within {{ $delivery_date }}.<br><br>
+                    @if ($delivery_date) Expected delivery: {{ $delivery_date }}. @endif<br><br>
 
-                    📄 <a href="{{ route('download.invoice', basename($invoice)) }}"
-                        style="color: #007bff; text-decoration: none;">
-                        Download your Invoice
-                    </a>
+                    Your invoice is attached. You can also download it after signing in to your Vanthara account.
                 </p>
             </div>
 
@@ -243,11 +240,6 @@
                             </tr>
                         @endforeach
 
-                        @php
-                            $delivery_charge = $item->order->delivery_charge ?? 0;
-                            // $grand_total = $total_amount + $delivery_charge;
-                        @endphp
-
                         @if ($delivery_charge > 0)
                             <tr>
                                 <td>Delivery Charge</td>
@@ -258,9 +250,13 @@
                             </tr>
                         @endif
 
+                        @if ($discount > 0)
+                            <tr><td>Discount</td><td></td><td>-&#8377;{{ number_format($discount, 2) }}</td></tr>
+                        @endif
+
                         <tr class="total-row">
                             <td colspan="2">Total Amount</td>
-                            <td>₹{{ number_format($total_amount + $delivery_charge, 2) }}</td>
+                            <td>₹{{ number_format($total_amount, 2) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -282,7 +278,7 @@
                 <a href="#">Twitter</a>
             </div>
             <p style="margin-top: 20px; font-size: 12px;">
-                © 2024 Your Company. All rights reserved.
+                &copy; {{ date('Y') }} Vanthara. All rights reserved.
             </p>
         </div>
     </div>

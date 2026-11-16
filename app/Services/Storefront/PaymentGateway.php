@@ -17,4 +17,6 @@ interface PaymentGateway
     public function createRefund(string $payment, array $data): array;
 
     public function refund(string $id): array;
+
+    public function paymentRefunds(string $payment): array;
 }

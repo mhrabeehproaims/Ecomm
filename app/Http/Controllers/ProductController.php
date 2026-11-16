@@ -8,7 +8,6 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\PackagingType;
 use App\Models\Product;
-use App\Models\ProductImage;
 use App\Models\Size;
 use App\Models\StockManagement;
 use App\Models\SubCategory;
@@ -26,6 +25,7 @@ class ProductController extends Controller
     public function index()
     {
         $products = Product::orderBy('product_id', 'desc')->get();
+
         return view('Product.products', ['products' => $products]);
     }
 
@@ -46,7 +46,7 @@ class ProductController extends Controller
             'sizes' => $sizes,
             'units' => $units,
             'taxSchedules' => $tax_schedules,
-            'weights' => $weights
+            'weights' => $weights,
         ]);
     }
 
@@ -57,7 +57,7 @@ class ProductController extends Controller
         if ($subcategories->isNotEmpty()) {
             $data = [
                 'status' => 'subCategory',
-                'data' => $subcategories
+                'data' => $subcategories,
             ];
         } else {
             $products = Product::select('product_id', 'product_name')
@@ -66,7 +66,7 @@ class ProductController extends Controller
 
             $data = [
                 'status' => 'product',
-                'data' => $products
+                'data' => $products,
             ];
         }
 
@@ -80,15 +80,15 @@ class ProductController extends Controller
         $brandIds = array_filter($request->brands ?? []);
 
         $products = Product::select('product_id', 'product_name', 'mrp', 'special_price')
-            ->when(count($categoryIds), fn($q) => $q->whereIn('category_id', $categoryIds))
-            ->when(count($subcategoryIds), fn($q) => $q->whereIn('sub_category_id', $subcategoryIds))
-            ->when(count($brandIds), fn($q) => $q->whereIn('brand_id', $brandIds))
+            ->when(count($categoryIds), fn ($q) => $q->whereIn('category_id', $categoryIds))
+            ->when(count($subcategoryIds), fn ($q) => $q->whereIn('sub_category_id', $subcategoryIds))
+            ->when(count($brandIds), fn ($q) => $q->whereIn('brand_id', $brandIds))
             ->where('status', 1)
             ->get();
 
         return response()->json([
             'status' => 'success',
-            'products' => $products
+            'products' => $products,
         ]);
     }
 
@@ -132,11 +132,11 @@ class ProductController extends Controller
             // Upload product images
             if ($request->hasFile('product_images')) {
                 $files = $request->file('product_images');
-                if (!is_array($files)) {
+                if (! is_array($files)) {
                     $files = [$files];
                 }
                 foreach ($files as $index => $file) {
-                    $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+                    $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
                     $path = $file->storeAs('Products', $filename, 'public');
 
                     if ($path === false) {
@@ -144,6 +144,7 @@ class ProductController extends Controller
                             'product_id' => $product->product_id,
                             'original_name' => $file->getClientOriginalName(),
                         ]);
+
                         continue;
                     }
 
@@ -157,11 +158,11 @@ class ProductController extends Controller
             // Upload description images
             if ($request->hasFile('desc_images')) {
                 $files = $request->file('desc_images');
-                if (!is_array($files)) {
+                if (! is_array($files)) {
                     $files = [$files];
                 }
                 foreach ($files as $file) {
-                    $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+                    $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
                     $path = $file->storeAs('DescriptionImages', $filename, 'public');
 
                     if ($path === false) {
@@ -169,6 +170,7 @@ class ProductController extends Controller
                             'product_id' => $product->product_id,
                             'original_name' => $file->getClientOriginalName(),
                         ]);
+
                         continue;
                     }
 
@@ -192,14 +194,15 @@ class ProductController extends Controller
 
     public function updateStatus(Product $product)
     {
-        $product->status = !$product->status;
+        $product->status = ! $product->status;
         Product::withoutEvents(function () use ($product) {
             $product->save();
         });
+        app(\App\Services\Storefront\CatalogInvalidation::class)->changed();
 
         return response()->json([
             'message' => 'success',
-            'status' => $product->status
+            'status' => $product->status,
         ]);
     }
 
@@ -226,10 +229,10 @@ class ProductController extends Controller
             'special_price' => $product->special_price ?? 0.0,
             'primary_price' => ucwords($product->primary_price) ?? '',
             'tax_schedule' => $product->taxSchedule->tax_name ?? '',
-            'tax_percentage' => $product->taxSchedule?->tax_percentage ? $product->taxSchedule->tax_percentage . ' (%)' : 0,
-            'tax_igst' => $product->taxSchedule?->igst ? $product->taxSchedule->igst . ' (%)' : 0,
-            'tax_cgst' => $product->taxSchedule?->cgst ? $product->taxSchedule->cgst . ' (%)' : 0,
-            'tax_sgst' => $product->taxSchedule?->sgst ? $product->taxSchedule->sgst . ' (%)' : 0,
+            'tax_percentage' => $product->taxSchedule?->tax_percentage ? $product->taxSchedule->tax_percentage.' (%)' : 0,
+            'tax_igst' => $product->taxSchedule?->igst ? $product->taxSchedule->igst.' (%)' : 0,
+            'tax_cgst' => $product->taxSchedule?->cgst ? $product->taxSchedule->cgst.' (%)' : 0,
+            'tax_sgst' => $product->taxSchedule?->sgst ? $product->taxSchedule->sgst.' (%)' : 0,
             'package_weight' => $product->package_weight ?? null,
             'hsn_code' => $product->hsn_code,
             'created_at' => $product->created_at ? $product->created_at->format('d-m-Y') : '',
@@ -240,7 +243,7 @@ class ProductController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $productData
+            'data' => $productData,
         ]);
     }
 
@@ -270,7 +273,7 @@ class ProductController extends Controller
                 'cgst_amount' => null,
                 'sgst_amount' => null,
                 'igst_amount' => null,
-                'primary_price' => $priceOptions[$product->primary_price] ?? 0
+                'primary_price' => $priceOptions[$product->primary_price] ?? 0,
             ];
         }
 
@@ -285,7 +288,7 @@ class ProductController extends Controller
             'weights' => $weights,
             'gst' => $gsts,
             'images' => $product->images,
-            'desc_images' => $product->descriptionImages
+            'desc_images' => $product->descriptionImages,
         ]);
     }
 
@@ -303,7 +306,7 @@ class ProductController extends Controller
                 'cgst_amount' => number_format($cgst_amount, 2),
                 'sgst_amount' => number_format($sgst_amount, 2),
                 'igst_amount' => number_format($igst_amount, 2),
-                'primary_price' => $product_netPrice
+                'primary_price' => $product_netPrice,
             ];
         }
 
@@ -342,6 +345,7 @@ class ProductController extends Controller
             Product::withoutEvents(function () use ($product, $data) {
                 $product->update($data);
             });
+            app(\App\Services\Storefront\CatalogInvalidation::class)->changed();
 
             // Handle product images
             $existingImageIds = $request->input('existing_images', []);
@@ -364,7 +368,7 @@ class ProductController extends Controller
                     : [$request->file('product_images')];
 
                 foreach ($files as $file) {
-                    $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+                    $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
                     $path = $file->storeAs('Products', $filename, 'public');
 
                     if ($path === false) {
@@ -372,6 +376,7 @@ class ProductController extends Controller
                             'product_id' => $product->product_id,
                             'original_name' => $file->getClientOriginalName(),
                         ]);
+
                         continue;
                     }
 
@@ -407,7 +412,7 @@ class ProductController extends Controller
                     : [$request->file('desc_images')];
 
                 foreach ($files as $file) {
-                    $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+                    $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
                     $path = $file->storeAs('DescriptionImages', $filename, 'public');
 
                     if ($path === false) {
@@ -415,6 +420,7 @@ class ProductController extends Controller
                             'product_id' => $product->product_id,
                             'original_name' => $file->getClientOriginalName(),
                         ]);
+
                         continue;
                     }
 

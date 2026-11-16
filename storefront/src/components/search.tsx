@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Search, ArrowUpRight } from 'lucide-react';
 
 type Suggestion = { name: string; href: string };
-export function SearchBox() {
+export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boolean; onNavigate?: () => void } = {}) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -35,16 +35,16 @@ export function SearchBox() {
     return () => document.removeEventListener('pointerdown', close);
   }, []);
   const visible = open && query.trim().length >= 2;
-  return <div ref={box} className="search-box" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false); }} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setActive(-1); } }}>
-    <form action="/products" role="search" className="search-form" onSubmit={() => setOpen(false)}>
+  return <div ref={box} className="search-box" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false); }} onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); setActive(-1); } }}>
+    <form action="/products" role="search" className="search-form" onSubmit={event => { event.preventDefault(); setOpen(false); router.push(`/products?${new URLSearchParams({ keyword: query.trim() })}`); onNavigate?.(); }}>
       <Search size={19} aria-hidden="true" />
       <label className="sr-only" htmlFor="site-search">Search the Vanthara catalog</label>
-      <input id="site-search" type="search" role="combobox" name="keyword" placeholder="Find your next favourite…" autoComplete="off" maxLength={120} value={query} onFocus={() => setOpen(true)} onChange={e => { setQuery(e.target.value); setItems([]); setActive(-1); setStatus('idle'); setOpen(true); }} aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={visible} aria-controls={visible && items.length ? 'search-suggestions' : undefined} aria-activedescendant={visible && active >= 0 ? `search-option-${active}` : undefined} onKeyDown={e => {
+      <input id="site-search" type="search" role="combobox" name="keyword" placeholder="Search the collection" data-modal-initial-focus={autoFocus || undefined} autoComplete="off" maxLength={120} value={query} onFocus={() => setOpen(true)} onChange={e => { setQuery(e.target.value); setItems([]); setActive(-1); setStatus('idle'); setOpen(true); }} aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={visible} aria-controls={visible && items.length ? 'search-suggestions' : undefined} aria-activedescendant={visible && active >= 0 ? `search-option-${active}` : undefined} onKeyDown={e => {
         if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length) {
           e.preventDefault(); setOpen(true);
           setActive(index => (index + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length);
         } else if (e.key === 'Enter' && visible && active >= 0 && items[active]) {
-          e.preventDefault(); setOpen(false); router.push(items[active].href);
+          e.preventDefault(); setOpen(false); onNavigate?.(); router.push(items[active].href);
         }
       }} />
       <button type="submit" aria-label="Search products"><ArrowUpRight size={18} /></button>
@@ -52,8 +52,8 @@ export function SearchBox() {
     {visible && <div className="search-results" id="search-results" aria-label="Search suggestions">
       <p className="eyebrow">Search the collection</p>
       <div role="status">{status === 'idle' || status === 'loading' ? <p>Finding your next discovery…</p> : status === 'error' ? <p>Suggestions are unavailable. You can still submit your search.</p> : items.length === 0 ? <p>No matching products yet.</p> : null}</div>
-      {status === 'ready' && items.length > 0 && <ul role="listbox" id="search-suggestions" aria-label="Matching products">{items.map((item, index) => <li id={`search-option-${index}`} role="option" aria-selected={active === index} key={item.href} onMouseDown={e => e.preventDefault()} onClick={() => { setOpen(false); router.push(item.href); }}><span>{item.name}</span><ArrowUpRight size={15} aria-hidden="true" /></li>)}</ul>}
-      <Link className="search-all" href={`/products?keyword=${encodeURIComponent(query)}`} onClick={() => setOpen(false)}>See all results <span aria-hidden="true">→</span></Link>
+      {status === 'ready' && items.length > 0 && <ul role="listbox" id="search-suggestions" aria-label="Matching products">{items.map((item, index) => <li id={`search-option-${index}`} role="option" aria-selected={active === index} key={item.href} onMouseDown={e => e.preventDefault()} onClick={() => { setOpen(false); onNavigate?.(); router.push(item.href); }}><span>{item.name}</span><ArrowUpRight size={15} aria-hidden="true" /></li>)}</ul>}
+      <Link className="search-all" href={`/products?keyword=${encodeURIComponent(query)}`} onClick={() => { setOpen(false); onNavigate?.(); }}>See all results <span aria-hidden="true">→</span></Link>
     </div>}
   </div>;
 }

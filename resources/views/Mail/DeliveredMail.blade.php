@@ -369,7 +369,7 @@
 
                 <div class="info-row">
                     <span class="info-label">Delivered On:</span>&nbsp;
-                    <span class="info-value">{{ $delivered_date ?? date('d M Y, h:i A') }}</span>
+                    <span class="info-value">{{ $delivered_date ?? 'Not recorded' }}</span>
                 </div>
                 @if ($delivery_address)
                     <div class="info-row address-block">
@@ -408,11 +408,6 @@
                             </tr>
                         @endforeach
                         
-                        @php
-                            $delivery_charge = $item->order->delivery_charge ?? 0;
-                            // $grand_total = $total_amount + $delivery_charge;
-                        @endphp
-
                         @if ($delivery_charge > 0)
                             <tr>
                                 <td>Delivery Charge</td>
@@ -424,7 +419,7 @@
                         @endif
                         <tr class="total-row">
                             <td colspan="2">Total Amount Paid</td>
-                            <td>₹{{ number_format($total_amount + $delivery_charge, 2) }}</td>
+                            <td>₹{{ number_format($total_amount, 2) }}</td>
                         </tr>
                     </tbody>
                 </table>

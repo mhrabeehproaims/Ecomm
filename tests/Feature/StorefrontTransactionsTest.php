@@ -72,8 +72,13 @@ class StorefrontTransactionsTest extends TestCase
     {
         $raw = json_encode($body);
 
-        return $this->call('POST', '/api/razorpay/webhook', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json',
+        $response = $this->call('POST', '/api/razorpay/webhook', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json',
             'HTTP_X_RAZORPAY_SIGNATURE' => hash_hmac('sha256', $raw, config('storefront.webhook_secret')), 'HTTP_X_RAZORPAY_EVENT_ID' => $event], $raw);
+        if ($response->getStatusCode() === 200) {
+            app(\App\Services\Storefront\WebhookProcessor::class)->drain();
+        }
+
+        return $response;
     }
 
     private function deliver(int $order, int $daysAgo = 0): void
@@ -245,6 +250,9 @@ class StorefrontTransactionsTest extends TestCase
         $this->app->detectEnvironment(fn () => 'production');
         $this->postJson('/api/checkout/quote', ['address_id' => $this->address, 'payment_method' => 'online'])->assertStatus(503);
         $this->getJson('/api/checkout/capabilities')->assertJsonPath('checkoutEnabled', false);
+        config(['storefront' => null]); // Older cached configuration must also fail closed with boolean capability fields.
+        $this->getJson('/api/checkout/capabilities')->assertOk()->assertJsonPath('checkoutEnabled', false)
+            ->assertJsonPath('codEnabled', false)->assertJsonPath('paymentTestConfigured', false);
     }
 
     public function test_signature_amount_and_capture_are_verified_then_committed_once(): void
@@ -454,6 +462,7 @@ class StorefrontTransactionsTest extends TestCase
         DB::table('products')->where('product_id', $this->product)->update(['stock' => 1, 'minimum_stock' => 0]);
         $this->bag();
         $order = $this->place('cod');
+        app(\App\Services\Storefront\Outbox::class)->dispatch();
         $this->assertDatabaseHas('notifications', ['type' => 'stock', 'notifiable_id' => $this->product]);
         $this->assertDatabaseCount('storefront_outbox', 3);
         $notifications = DB::table('notifications')->count();
@@ -487,6 +496,7 @@ class StorefrontTransactionsTest extends TestCase
         $order = $this->place('cod');
         $this->deliver($order['order_id']);
         $id = $this->postJson('/api/sales-return/save', $this->returnPayload($order['order_id']))->assertCreated()->json('return_id');
+        app(\App\Services\Storefront\Outbox::class)->dispatch();
         $this->assertDatabaseHas('notifications', ['type' => 'return', 'notifiable_id' => $order['order_id']]);
         $model = \App\Models\Order::disableCache()->with('customer')->find($order['order_id']);
         $payload = (new \App\Events\NotifyOrderPlaced('Test', 100, $model))->broadcastWith();

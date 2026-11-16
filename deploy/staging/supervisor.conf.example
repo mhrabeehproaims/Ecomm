@@ -1,0 +1,16 @@
+; TEMPLATE ONLY. Not installed. Adapt reviewed service user/paths/PHP binary first.
+; Normal hosted staging keeps checkout disabled. This worker serves ordinary Laravel jobs.
+[program:vanthara-staging-queue]
+directory=/srv/vanthara/current
+command=/usr/bin/php artisan queue:work database --queue=default --sleep=3 --tries=3 --timeout=60
+user=vanthara
+autostart=true
+autorestart=true
+numprocs=1
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=90
+redirect_stderr=true
+stdout_logfile=/srv/vanthara/shared/logs/queue.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5

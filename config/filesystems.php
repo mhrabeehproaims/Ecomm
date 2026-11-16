@@ -30,6 +30,11 @@ return [
 
     'disks' => [
 
+        'documents' => [
+            'driver' => 'local', 'root' => env('STOREFRONT_DOCUMENT_ROOT') ?: storage_path('app/financial-documents'),
+            'visibility' => 'private', 'serve' => false, 'throw' => true,
+        ],
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

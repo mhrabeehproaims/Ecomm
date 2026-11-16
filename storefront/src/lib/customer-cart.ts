@@ -10,7 +10,10 @@ const rawCart = z.array(z.object({ cart_id: z.coerce.number().int().positive(), 
 
 export async function customerCart(token: string): Promise<CartItem[]> {
   const response = await customerRequest('cart', token);
-  const parsed = rawCart.safeParse(response.data);
+  return parseCustomerCart(response.data);
+}
+export function parseCustomerCart(data: unknown): CartItem[] {
+  const parsed = rawCart.safeParse(data);
   if (!parsed.success) throw new CustomerError(502, 'Your bag could not be loaded.');
   if (parsed.data.some(item => !item.product)) throw new CustomerError(409, 'A product in your bag is no longer available. Please contact support.');
   return parsed.data.map(item => {

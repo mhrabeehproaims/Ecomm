@@ -8,12 +8,16 @@
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
+    "dev:local": "node scripts/dev-local.mjs",
+    "catalog:check": "node scripts/dev-local.mjs --check",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
     "test:browser": "playwright test",
+    "test:catalog": "playwright test --config=playwright.catalog.config.ts",
     "test:transactions": "playwright test --config=playwright.transactions.config.ts",
+    "test:fashion": "playwright test --config=playwright.fashion.config.ts",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

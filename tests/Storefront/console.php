@@ -2,7 +2,7 @@
 
 $test = require __DIR__.'/environment.php';
 require $test['root'].'/vendor/autoload.php';
-$allowed = ['storefront:expire-reservations', 'storefront:dispatch-events', 'storefront:reconcile-payment', 'storefront:refund-return', 'storefront:recover-refund'];
+$allowed = ['storefront:expire-reservations', 'storefront:dispatch-events', 'storefront:reconcile-payment', 'storefront:refund-return', 'storefront:recover-refund', 'storefront:financial-maintenance', 'storefront:financial-status', 'storefront:archive-documents', 'storefront:refund-late-capture', 'storefront:recover-refund-intent', 'queue:work', 'queue:failed', 'schedule:run', 'schedule:list'];
 if (! in_array($argv[1] ?? '', $allowed, true)) {
     throw new RuntimeException('Only isolated storefront operations are allowed by this wrapper.');
 }

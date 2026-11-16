@@ -1,0 +1,21 @@
+# TEMPLATE ONLY. Not installed. Node path/service user/environment file need host review.
+[Unit]
+Description=Vanthara staging storefront with checkout disabled
+After=network.target
+
+[Service]
+Type=simple
+User=vanthara
+Group=vanthara
+WorkingDirectory=/srv/vanthara/current/storefront
+EnvironmentFile=/etc/vanthara/staging-storefront.env
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

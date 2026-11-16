@@ -18,7 +18,7 @@ class WholesaleEnquiryApi extends Controller
             'message' => 'required|string',
         ]);
 
-        $validated['status'] = 'Pending';
+        $validated['status'] = 'pending';
         WholesaleEnquiry::create($validated);
         return response()->json([
             'status' => 'success',

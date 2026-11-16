@@ -292,6 +292,11 @@
                                     </a>
                                 </li>
                                 <li>
+                                    <a href="{{ route('web.carts.index') }}" class="{{ request()->routeIs('web.carts.*') ? 'active' : '' }}">
+                                        <span>Cart Items</span>
+                                    </a>
+                                </li>
+                                <li>
                                     <a href="{{ route('wholsale.enquiry') }}" class="">
                                         <span key="t-dashboards">Wholsale Enquiry</span>
                                     </a>

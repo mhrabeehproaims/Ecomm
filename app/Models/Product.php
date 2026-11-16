@@ -12,7 +12,9 @@ class Product extends Model
     // use Cachable;
 
     protected $primaryKey = 'product_id';
+
     protected $guarded = [];
+
     protected $appends = ['encrypted_product_id', 'offer', 'offer_price'];
 
     public function images()
@@ -95,6 +97,11 @@ class Product extends Model
         return $query->where('status', 1);
     }
 
+    public function scopeForCatalog(Builder $query): Builder
+    {
+        return $query->active()->with(['category', 'subCategory', 'brand', 'size', 'weight', 'unit', 'packageType', 'images']);
+    }
+
     public function stock()
     {
         return $this->hasMany(StockManagement::class, 'product_id', 'product_id');
@@ -158,6 +165,7 @@ class Product extends Model
         if ($discounted_price && $cgst) {
             return ($cgst / 100) * $discounted_price;
         }
+
         return 0.0;
     }
 
@@ -169,6 +177,7 @@ class Product extends Model
         if ($discounted_price && $igst) {
             return ($igst / 100) * $discounted_price;
         }
+
         return 0.0;
     }
 
@@ -186,6 +195,7 @@ class Product extends Model
             $percent = ($igst / 100) * $discounted_price;
             $net_price = $discounted_price + ($percent * 2);
         }
+
         return $net_price;
     }
 
@@ -213,8 +223,9 @@ class Product extends Model
     {
         $offer = $this->offer;
 
-        if (!$offer)
+        if (! $offer) {
             return null;
+        }
 
         $details = collect($offer->product_details)
             ->where('product_id', (string) $this->product_id)

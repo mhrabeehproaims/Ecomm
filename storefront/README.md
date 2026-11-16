@@ -8,13 +8,16 @@ Public browsing, customer shopping and the approved Laravel checkout safeguards 
 
 This workspace now has an ignored `.env.local` with normal loopback origins, a random development session secret and sandbox checkout disabled. Preserve it. The copy/generation steps below apply to a fresh checkout; never reuse its development secret for deployment.
 
-Run the existing Laravel API from the root:
+The normal Laravel API for this workspace runs at `http://localhost:8000`. When it is already running, start only the storefront:
 
 ```powershell
-php artisan serve --host=127.0.0.1 --port=8137 --no-reload
+cd C:\laragon\www\vanthara-main\storefront
+npm.cmd run dev
 ```
 
-In a separate terminal:
+Set `LARAVEL_API_ORIGIN=http://localhost:8000` in the existing ignored `.env.local`. Run `npm.cmd run catalog:check` to diagnose the configured API. The fixture API on port 8138 contains a separate sample database and must not replace the admin API. If Laravel is stopped, the optional `npm.cmd run dev:local` starts both applications using the configured loopback origins and normal local Laravel database. It rejects occupied ports without stopping other applications and keeps checkout disabled. Use it only when those ports are free.
+
+For a fresh checkout, install dependencies and configure the session secret before starting:
 
 ```powershell
 cd C:\laragon\www\vanthara-main\storefront
@@ -22,7 +25,7 @@ if (!(Test-Path -LiteralPath '.env.local')) { Copy-Item .env.example .env.local 
 npm.cmd ci
 node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
 # Put the generated value in STOREFRONT_SESSION_SECRET in .env.local.
-npm.cmd run dev
+npm.cmd run dev:local
 ```
 
 Open http://127.0.0.1:3000. Preserve an existing `.env.local`. Node >=20.9 is required; use npm.cmd when PowerShell blocks npm.ps1. Set `LARAVEL_API_ORIGIN` without `/api` and `STOREFRONT_URL` to the exact browser origin; restart Next after changes. Public deployment needs HTTPS and a deployment-managed random session secret. No Laravel bearer token or payment secret belongs in NEXT_PUBLIC variables. No production migrations/seeders are part of frontend setup.
@@ -100,3 +103,5 @@ Stop task-owned processes after testing. Clear temporary shell overrides and reb
 Public browsing retains real backend products/categories/offers, opaque encrypted links, keyboard search, filters/pagination, media fallbacks, actual return policies and metadata. Filters operate over the loaded full API response; backend pagination is needed for scale. Stable product locators remain missing, so product pages stay noindex and global indexing defaults off. Business information pages remain provisional. No deployment was performed.
 
 The existing decorative `public/hero.webp` was generated in the earlier visual phase (1400px WebP, about 129KB): ivory vase, leafy branch, linen and plum sculpture on warm limestone. It is not product imagery. Authentic Laravel product media was preserved; isolated test-logo images never replace production inventory.
+
+Fashion redesign: see `docs/STOREFRONT-FASHION-REDESIGN.md` and `docs/FASHION-DATA-PROPOSAL.md` in the repository root. Original editorial assets live in `public/fashion`; product photography still comes from Laravel. `npm run test:fashion` exercises seven responsive widths plus navigation and isolated customer pages. It requires the normal read-only app on port 3000 and the explicitly isolated test harness on ports 8138/3140; never point the writable harness at a normal database. The existing catalog and transaction test commands remain available.

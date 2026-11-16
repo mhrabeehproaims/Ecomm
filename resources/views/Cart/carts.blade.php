@@ -1,188 +1,92 @@
 @extends('layouts.app')
+@section('title', 'Customer Cart Items')
 @push('styles')
     <link href="{{ asset('assets/libs/select2/css/select2.min.css') }}" rel="stylesheet" type="text/css" />
-
 @endpush
-
-@section('title', 'Cart Product Management')
 @section('content')
-    <div class="main-content">
-        <div class="page-content">
-            <div class="container-fluid">
-                <!-- start page title -->
-                <div class="row">
-                    <div class="col-12">
-                        <div class="page-title-box d-sm-flex align-items-center justify-content-between">
-                            <h4 class="mb-sm-0 font-size-18">Cart Products</h4>
-
-                            <div class="page-title-right">
-                                <ol class="breadcrumb m-0">
-                                    <li class="breadcrumb-item"><a href="javascript: void(0);">Dashboard</a></li>
-                                    <li class="breadcrumb-item active">Cart Management</li>
-                                </ol>
-                            </div>
-
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18">Cart Items</h4>
+                <ol class="breadcrumb m-0"><li class="breadcrumb-item"><a href="{{ route('home') }}">Dashboard</a></li><li class="breadcrumb-item active">Cart Items</li></ol>
+            </div>
+            <p class="text-muted">See the products customers currently have in their shopping bags.</p>
+            @if ($errors->any())
+                <div class="alert alert-danger" role="alert"><ul class="mb-0">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
+            @endif
+            <div class="card"><div class="card-body">
+                <form action="{{ route('web.carts.index') }}" method="get" aria-label="Filter customer carts">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-12 col-md-4">
+                            <label for="cart-customer" class="form-label">Customer</label>
+                            <select class="form-select select2" id="cart-customer" name="customer">
+                                <option value="">All customers</option>
+                                @foreach ($customers as $customer)
+                                    <option value="{{ $customer->customer_id }}" @selected((string) ($filters['customer'] ?? '') === (string) $customer->customer_id)>{{ trim($customer->first_name.' '.$customer->last_name) }}{{ $customer->phone ? ' · '.$customer->phone : '' }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label for="cart-product" class="form-label">Product</label>
+                            <select class="form-select select2" id="cart-product" name="product">
+                                <option value="">All products</option>
+                                @foreach ($products as $product)
+                                    <option value="{{ $product->product_id }}" @selected((string) ($filters['product'] ?? '') === (string) $product->product_id)>{{ $product->product_name }}{{ (int) $product->status === 1 ? '' : ' (inactive)' }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4 d-flex gap-2">
+                            <button class="btn btn-primary" type="submit">Filter</button>
+                            <a class="btn btn-outline-secondary" href="{{ route('web.carts.index') }}">Clear filters</a>
                         </div>
                     </div>
+                </form>
+            </div></div>
+            <div class="card"><div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="card-title mb-0">Customer shopping bags</h5>
+                    <span class="text-muted">{{ $cart_products->total() }} cart {{ $cart_products->total() === 1 ? 'entry' : 'entries' }}</span>
                 </div>
-                <!-- end page title -->
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card p-3">
-                            <div class="row">
-                                <div class="col-12">
-                                    <form action="{{ route('web.carts.byCustomer') }}" method="post">
-                                        @csrf
-                                        <div class="row g-3 align-items-end">
-                                            <div class="col-12 col-md-4">
-                                                <label for="customer" class="form-label">Customer</label>
-                                                <select class="form-select select2" id="customer" name="customer">
-                                                    <option value="" selected>--Select Customer--</option>
-                                                    @foreach ($customers as $customer)
-                                                        <option value="{{ $customer->customer_id ?? '' }}"
-                                                            {{ $customer->customer_id == old('customer') ? 'selected' : '' }}>
-                                                            {{ $customer->full_name ?? '' }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                            </div>
-                                            <div class="col-12 col-md-4">
-                                                <label for="product" class="form-label">Product</label>
-                                                <select class="form-select select2" id="product" name="product">
-                                                    <option value="" selected>--Select Product--</option>
-                                                    @foreach ($products as $product)
-                                                        <option value="{{ $product->product_id ?? '' }}"
-                                                            {{ $product->product_id == old('product') ? 'selected' : '' }}>
-                                                            {{ $product->product_name ?? '' }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                            </div>
-                                            <div class="col-3">
-                                                <button class="btn btn-secondary" type="submit"
-                                                    style="width: 100px">Filter</button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card">
-                            <div class="card-body">
-                                <table id="datatable" class="table table-bordered dt-responsive w-100">
-                                    <thead>
-                                        <tr class="text-center">
-                                            <th class="text-start" style="width: 5%">#</th>
-                                            <th class="text-start" style="width: 15%">Product Name</th>
-                                            <th class="text-start" style="width: 15%">Customer Name</th>
-                                            <th class="text-start" style="width: 15%">Customer Contact</th>
-                                            <th class="text-start" style="width: 15%">Added Date</th>
-
-
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($cart_products as $cart_product)
-                                            <tr>
-                                                <td class="text-center">
-                                                    {{ $loop->iteration }}
-                                                </td>
-                                                <td class="text-start">{{ $cart_product->product->product_name }}</td>
-                                                <td class="text-start">
-                                                    {{ $cart_product->customer?->first_name ?? ('' . ' ' . $cart_product->customer?->last_name ?? '') }}
-                                                </td>
-                                                @php
-                                                    $phone = preg_replace('/\D/', '', $cart_product->customer->phone ?? '');
-                                                    // Add Indian country code if not present
-                                                    if (!empty($phone) && !Str::startsWith($phone, '91')) {
-                                                        $phone = '91' . $phone;
-                                                    }
-                                                @endphp
-
-                                                <td class="text-start">
-                                                    @if (!empty($cart_product->customer->phone))
-                                                        {{ $cart_product->customer->phone }}
-                                                        <a href="https://wa.me/{{ $phone }}?text={{ 'Hi! You recently added some items to your wishlist on Vantara. Just checking if you need any help with the products or if you’d like to place an order. Happy to assist!' }}"
-                                                            target="_blank" class="ms-2 text-success"
-                                                            title="Chat on WhatsApp">   
-                                                            <i class="fab fa-whatsapp"></i>
-                                                        </a>
-                                                    @else
-                                                        -
-                                                    @endif
-                                                </td>
-                                                <td class="text-start">{{ $cart_product->created_at?->format('d-m-Y') }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-
-                            </div>
-                        </div>
-                    </div> <!-- end col -->
-                </div> <!-- end row -->
-
-            </div> <!-- container-fluid -->
-        </div>
-        <!-- End Page-content -->
-
-        <div class="modal fade modal-md" id="showStatusModal" tabindex="-1" aria-labelledby="showStatusModalLabel"
-            aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <form id="changeStatusForm">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="showStatusModalLabel">Update Order Status</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-
-                        {{-- hidden input (inside form now) --}}
-                        <input type="hidden" name="hidden_id" id="hidden_id">
-
-                        <div class="modal-body">
-                            <div class="mb-3 text-center">
-                                <span class="fw-semibold">Current Status:</span>
-                                <span class="ms-2 info-value"></span>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="statusSelect" class="form-label">Change Status</label>
-                                <select name="statusSelect" id="statusSelect" class="form-select">
-                                    <option value="pending">Pending</option>
-                                    <option value="confirmed">Confirmed</option>
-                                    <option value="processing">Processing</option>
-                                    <option value="shipped">Shipped</option>
-                                    <option value="delivered">Delivered</option>
-                                    <option value="completed">Completed</option>
-                                    <option value="cancelled">Cancelled</option>
-                                    <option value="refunded">Refunded</option>
-                                </select>
-                            </div>
-                        </div>
-
-
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            <button type="submit" class="btn btn-primary">Confirm</button>
-                        </div>
-                    </form>
+                <p class="text-muted font-size-12">Saved unit prices are the prices stored in the cart, not final checkout totals. Inactive or unavailable products remain visible here.</p>
+                <div class="table-responsive">
+                    <table id="customer-cart-table" class="table table-bordered table-hover align-middle w-100">
+                        <thead><tr><th scope="col">#</th><th scope="col">Product</th><th scope="col">Customer</th><th scope="col">Contact</th><th scope="col">Quantity</th><th scope="col">Saved unit price</th><th scope="col">Availability</th><th scope="col">Added</th><th scope="col">Last updated</th></tr></thead>
+                        <tbody>
+                        @forelse ($cart_products as $cart)
+                            <tr data-cart-id="{{ $cart->cart_id }}">
+                                <td>{{ $cart_products->firstItem() + $loop->index }}</td>
+                                <td><div class="d-flex align-items-center gap-3" style="min-width:200px">
+                                    @if ($cart->product?->primaryImage?->image_path)
+                                        <img src="{{ asset('storage/'.ltrim($cart->product->primaryImage->image_path, '/')) }}" alt="{{ $cart->product->product_name }}" width="52" height="68" loading="lazy" style="object-fit:contain;background:#f7f5f1" onerror="this.hidden=true;this.nextElementSibling.hidden=false">
+                                        <span hidden class="text-muted font-size-12">No image</span>
+                                    @else
+                                        <span class="text-muted font-size-12">No image</span>
+                                    @endif
+                                    <div><span class="fw-medium">{{ $cart->product?->product_name ?? 'Product unavailable' }}</span>@if ($cart->product?->size?->size_name)<div class="text-muted font-size-12">Size: {{ $cart->product->size->size_name }}</div>@endif</div>
+                                </div></td>
+                                <td>{{ $cart->customer ? trim($cart->customer->first_name.' '.$cart->customer->last_name) : 'Guest / customer unavailable' }}</td>
+                                <td class="text-nowrap">{{ $cart->customer?->phone ?: '—' }}@if ($cart->customer?->email)<div class="text-muted font-size-12">{{ $cart->customer->email }}</div>@endif</td>
+                                <td class="text-end">{{ $cart->quantity }}</td>
+                                <td class="text-end text-nowrap">₹{{ number_format((float) $cart->price, 2) }}</td>
+                                <td>@if (!$cart->product)<span class="badge bg-secondary">Unavailable</span>@elseif ((int) $cart->product->status !== 1)<span class="badge bg-secondary">Inactive</span>@elseif ($cart->product->stock < 1)<span class="badge bg-warning text-dark">Out of stock</span>@else<span class="badge bg-success">In stock</span>@endif</td>
+                                <td class="text-nowrap">{{ $cart->created_at?->format('d M Y, H:i') ?? '—' }}</td>
+                                <td class="text-nowrap">{{ $cart->updated_at?->format('d M Y, H:i') ?? '—' }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="9" class="text-center text-muted py-4">No cart items found{{ $filters ? ' for these filters' : '' }}.</td></tr>
+                        @endforelse
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+                {{ $cart_products->links('pagination::bootstrap-5') }}
+            </div></div>
         </div>
-
-        <x-footer />
     </div>
+    <x-footer />
+</div>
 @endsection
-
 @push('page-scripts')
-    {{-- //for select2 start --}}
     <script src="{{ asset('assets/libs/select2/js/select2.min.js') }}"></script>
-    <script src="{{ asset('assets/js/pages/form-advanced.init.js') }}"></script>
-    {{-- //for select2 end --}}
-    <script>
-        $('.select2').select2({
-            placeholder: "--Select Customer--",
-            allowClear: true
-        });
-    </script>
+    <script>$('.select2').select2({ width: '100%' });</script>
 @endpush

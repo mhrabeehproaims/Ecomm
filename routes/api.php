@@ -49,6 +49,7 @@ Route::get('return-policies', [UtilityController::class, 'getAllPolicies']);
 Route::post('track-visit', [AnalyticsController::class, 'trackVisit'])->middleware('optional.sanctum');
 
 Route::middleware(['auth:sanctum', \App\Http\Middleware\ActiveCustomer::class, 'throttle:customer-api'])->group(function () {
+    Route::get('shopping-state', \App\Http\Controllers\Api\ShoppingStateController::class);
     Route::apiResource('wishlist', WishlistController::class);
     Route::get('/cart', [CartController::class, 'index']);
     Route::post('/cart', [CartController::class, 'store']);
@@ -65,6 +66,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\ActiveCustomer::class, '
     Route::get('orders/{order}', [\App\Http\Controllers\Api\StorefrontCheckoutController::class, 'detail'])->whereNumber('order');
     Route::post('orders/{order}/cancel', [\App\Http\Controllers\Api\StorefrontCheckoutController::class, 'cancel'])->whereNumber('order');
     Route::get('orders/{order}/tracking', [\App\Http\Controllers\Api\StorefrontCheckoutController::class, 'tracking'])->whereNumber('order');
+    Route::get('orders/{order}/documents/{kind}', [\App\Http\Controllers\OrderDocumentController::class, 'customer'])->whereNumber('order');
     Route::get('orders/{order}/return-eligibility', [\App\Http\Controllers\Api\StorefrontCheckoutController::class, 'eligibility'])->whereNumber('order');
     Route::get('/order-items/{orderItemId}/comments', [CommentController::class, 'show']);
     Route::post('/order-items/{orderItemId}/comments', [CommentController::class, 'store']);

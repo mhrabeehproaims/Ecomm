@@ -22,6 +22,39 @@ Outputs: `storefront/artifacts/backend-implementation/changes.json` and `full.di
 
 One tooling error caused Pint to run beyond its intended file list. It was stopped; **128 unrelated checkpointed PHP files were restored byte-for-byte and their hashes verified**. Evidence is `formatting-restoration.json` beside the diff. Two pre-existing seeders (`database/seeders/AdminTableSeeder.php`, `DatabaseSeeder.php`) were outside the checkpoint and retain incidental formatter-only edits. Neither seeder was executed; no intentional seeding/business statements were changed. Their pre-format text was not captured, so the inventory explicitly marks them `incidental-formatting` with no baseline diff. Subsequent formatting uses a validated explicit file list and stops on list-generation failure.
 
+## Files created and modified
+
+The [complete file inventory](../storefront/artifacts/backend-implementation/changes.json) records all **65** created/modified/incidental files with hashes and status. The [review diff](../storefront/artifacts/backend-implementation/full.diff) covers every inventoried file except the two explicitly disclosed seeders with no original baseline.
+
+| Area | Created | Modified |
+| --- | --- | --- |
+| Laravel transaction services | `app/Services/Storefront/`: CheckoutAccess, CheckoutPricing, CheckoutService, Money, Outbox, PaymentGateway, PaymentService, RazorpayTestGateway, RefundService, ReplacementService, ReturnService | None of these services existed previously. |
+| Customer APIs | `StorefrontCheckoutController.php`, `ActiveCustomer.php` | API Auth, Cart, Customers, DeliveryAddress, Payment and SalesReturn controllers; DeliverAddressRequest; OrderHistoryResource; `routes/api.php` |
+| Admin integration/security | — | Root OrderController and SalesReturnController; NotifyOrderPlaced and sendReturnNotification events; `routes/channels.php`; admin `layouts/app.blade.php` |
+| Configuration/operations | `config/storefront.php` | AppServiceProvider, `config/cache.php`, `routes/console.php` |
+| Database | The two additive migrations listed below | No original migrations; two incidental seeder formatting changes only. |
+| Next UI | `cart-quantity.tsx`, `secure-checkout.tsx`, `order-support.tsx` | Customer BFF route, customer contracts/server adapter, auth-form, customer-screen, test-payment, globals.css |
+| Tests/helpers | StorefrontTransactionsTest, fake gateway/fixture support, concurrency worker, guarded MySQL setup/environment/races, isolated migrate/console/pending-fixture helpers | Isolated environment, sample seed, delivered fixture and transactional Playwright suite |
+| Documentation/review | This report and `checkout-change-report.mjs` | Storefront README, historical transaction report and approval document |
+
+No npm/Composer dependency or lockfile change was needed. Existing assets, original controllers outside the reviewed integration scope and existing migration contents were preserved.
+
+## Feature completion status
+
+“Verified locally” below describes isolated fixtures and the stated test coverage; it is not production activation approval.
+
+| Feature | Status | Evidence / remaining dependency |
+| --- | --- | --- |
+| Registration, login, logout, profile and owned delivery addresses | Verified locally | Laravel and real Chromium journeys; inactive/token/ownership/password checks. |
+| Wishlist, cart quantities/removal and coupon validation | Verified locally | Actual Laravel responses, browser actions and transactional price/limit tests. |
+| Authoritative checkout, tax/delivery quotes and order placement | Verified locally | Exact paise, snapshots, expiry/idempotency/rollback tests; six MySQL races cover stock/coupon/payment/replacement contention. Commercial rules remain unapproved test configuration. |
+| Razorpay creation, verification, failure/retry, reconciliation and webhooks | Implemented; provider acceptance unverified | Fake-provider security tests and explicitly mocked SDK recovery UI pass. Real test credentials and an authorized HTTPS webhook endpoint are missing. |
+| Order history, cancellation and internal tracking | Verified locally | Owned history, actual logs, address snapshots, reservation cancellation and access-control tests. External carrier API integration is missing. |
+| Return eligibility, quantities, ownership and status transitions | Verified locally | Delivered paid fixtures, expired/ineligible/duplicate/foreign requests and browser return journey. Legacy delivery/address gaps fail closed. |
+| Replacement fulfillment and provider refunds | Implemented; partly verified | Real isolated replacement orders/stock races pass; refund intents/results/recovery use a fake provider. Real test refund acceptance and approved replacement/refund terms are outstanding. |
+| Admin compatibility and notifications | Local regression coverage | Legacy updates and new-order guards pass. Private channel authorization and retryable effects pass; live Pusher/SMTP delivery was not tested. |
+| Production checkout | Disabled | Backend environment/database/test-key gates and independent Next gate verified. Explicit activation approval has not been given. |
+
 ## Migrations
 
 Only new isolated databases received migrations. Both SQLite and a separate MySQL 8.4.3 instance successfully ran all **53 migrations** (51 existing + 2 new):
@@ -93,7 +126,26 @@ Carrier inspection found internal `delivery_partners`, assigned tracking referen
 
 ## Verification and evidence
 
-Final verification results are recorded below after the final runs. Tests use a new SQLite file under `storage/framework/testing/vanthara-checkout-v2/`, in-memory SQLite for feature cases, and a separate MySQL server on loopback port 3339 with its own new datadir. MySQL helpers verify the server's actual datadir before creating/migrating a uniquely named test database. No original application database was migrated, reset or seeded.
+Tests use a new SQLite file under `storage/framework/testing/vanthara-checkout-v2/`, in-memory SQLite for feature cases, and a separate MySQL server on loopback port 3339 with its own new datadir. MySQL helpers verify the server's actual datadir before creating/migrating a uniquely named test database. No original application database was migrated, reset or seeded.
+
+| Verification | Final result |
+| --- | --- |
+| `php tests/Storefront/run-tests.php` | **40 passed, 226 assertions**, no failures. Includes the existing Laravel tests and new transaction/admin/security cases. |
+| Isolated migrations | **53/53 passed on fresh SQLite and MySQL 8.4.3**; 2 are new migrations. |
+| MySQL independent-process races | **6/6 passed**: last stock unit, duplicate checkout, last coupon use, duplicate capture, expiry/capture and duplicate replacement. The losing stock/coupon worker is correctly rejected, not counted as a failed scenario. |
+| `npm.cmd test` | **31 passed**, no failures. |
+| `npm.cmd run typecheck` | Passed. |
+| `npm.cmd run build` | Passed with isolated sample origins, then passed again with normal local origins and checkout disabled; **22 static pages generated**. The final `.next` is the normal-origin build. |
+| `npm.cmd run test:transactions` | **5/5 real Chromium journeys passed**, zero retries/skips/flaky/unexpected results. Twelve full-page 393/1440px screenshots saved. |
+| Focused `test:browser` regression | **3/3 passed**: catalog/product journey, filters and keyboard skip navigation. Previous full seven-width QA retained. |
+| `npm.cmd run smoke` on normal local build | **16/16 read-only HTTP checks passed**: key public/account shells, search, metadata, assets and escaped input. |
+| Normal-origin release gates | Backend `checkoutEnabled=false`, frontend `sandboxCheckout=false`, test credentials unavailable and anonymous orders **401**. A stale pre-existing config cache also returns boolean disabled capabilities. |
+| Scoped PHP checks | **46 implementation/test PHP files** parsed successfully; scoped Pint formatting passed. This is not a claim that the whole pre-existing repository satisfies Pint. |
+| Isolated operator wrappers | Expiry and outbox commands completed successfully without touching the normal application DB. |
+
+An intermediate mocked-payment browser assertion matched two `role=status` elements and failed strict selection. The test now targets the exact cancellation confirmation; the final complete five-test run passed. No known final automated-test failure remains. Real merchant/provider acceptance, physical devices and external transports remain unverified as described below.
+
+Pages exercised through Chromium include registration/login, account/profile/addresses, wishlist, cart/coupons, final checkout quote, order details/history, cancellation, payment pending/failure/cancellation recovery and return requests, plus preserved catalog/product/filter/keyboard browsing. Transactional screenshots were inspected visually, and their capture asserts no horizontal document overflow. Page exceptions are collected and asserted absent; expected validation/payment-unavailable HTTP errors are part of the tests.
 
 Evidence paths:
 
@@ -103,6 +155,8 @@ Evidence paths:
 - `storefront/artifacts/backend-implementation/`: file inventory, full scoped diff and formatting-restoration audit.
 
 The completed seven-width visual QA was retained; it was not unnecessarily repeated. No physical-device, Safari/WebKit/Firefox, real Razorpay SDK success or real carrier/email/Pusher delivery certification is claimed.
+
+All task-owned test and normal-origin verification servers were stopped afterward. The separately initialized MySQL instance was shut down gracefully; its test databases and the SQLite fixtures were retained. The root `.env` and normal storefront `.env.local` were preserved, with normal loopback origins and sandbox transactions false.
 
 ## Required environment and operations
 
@@ -138,6 +192,23 @@ php tests/Storefront/console.php storefront:recover-refund RETURN_ID rfnd_PROVID
 
 The wrapper refuses unrelated commands and checks isolation. Do not substitute normal artisan commands against an unknown environment. Schedule expiration/outbox dispatch and reconciliation monitoring only in the explicitly configured test environment for now. Notification delivery is at least once across worker crashes; financial/order effects remain idempotent.
 
+To repeat MySQL races, start the **already initialized disposable instance** in its own terminal (the helper verifies this exact datadir, not the normal Laragon MySQL instance):
+
+```powershell
+& 'C:\laragon\bin\mysql\mysql-8.4.3-winx64\bin\mysqld.exe' --no-defaults --datadir='C:\laragon\www\vanthara-main\storage\framework\testing\mysql-checkout-20261113' --bind-address=127.0.0.1 --port=3339 --mysqlx=OFF --skip-log-bin --console
+```
+
+In a second root terminal, choose a new schema name; existing schemas are never overwritten:
+
+```powershell
+$env:STOREFRONT_MYSQL_TEST_DATABASE = 'vanthara_checkout_test_' + (Get-Date -Format 'yyyyMMddHHmmss')
+php tests/Storefront/mysql-setup.php
+php tests/Storefront/mysql-concurrency.php
+& 'C:\laragon\bin\mysql\mysql-8.4.3-winx64\bin\mysqladmin.exe' --no-defaults --host=127.0.0.1 --port=3339 --user=root shutdown
+```
+
+This isolated MySQL fixture instance has a loopback-only test root account; it is not a deployment configuration. Do not reinitialize its datadir or point the helpers at production. Neither normal application seeders nor production payment keys are used.
+
 ## Production blockers and activation requirements
 
 1. **Activation is not approved and remains impossible through a production env flag alone.** A separately approved code/config deployment change is needed to remove the isolated-database/test-key restrictions after acceptance.
@@ -146,6 +217,6 @@ The wrapper refuses unrelated commands and checks isolation. Do not substitute n
 4. Define and exercise operational handling of `indeterminate`, expired/late captured, `refund_required`, failed refund and outbox backlog states. Late-capture refunds and COD/manual payouts require an approved operator workflow. Configure scheduled jobs, alerts and monitoring before activation.
 5. Review legacy order delivery evidence/address gaps and data-retention/account-erasure behavior; no historical facts were fabricated or backfilled. Existing scaffold admin-seeding credentials must not be used for production provisioning; those seeders were not run here.
 6. Configure HTTPS, separate deployment secrets, shared durable throttling/trusted request attribution where applicable, private Pusher transport and email delivery. Private-channel authorization was tested locally; external transport delivery was not.
-7. Run the additive migrations on a backed-up staging copy, verify admin/customer compatibility with real business data and complete gateway acceptance. Production migrations require the separate deployment authorization; none were run.
+7. Run the additive migrations on a backed-up staging copy, rebuild Laravel configuration/route caches and Next with the intended deployment origins, verify admin/customer compatibility with real business data and complete gateway acceptance. The normal local database and existing Laravel config cache were deliberately left untouched; financial endpoints need the new schema in an authorized environment. Production migrations require the separate deployment authorization; none were run.
 8. Publish approved business/privacy/terms/shipping/support copy, resolve stable product locators and retain noindex until release approval. External carrier tracking is a separate integration, not a completed feature.
 9. Obtain the user's **explicit production activation approval** after the above evidence is reviewed. Local passing tests do not authorize activation.

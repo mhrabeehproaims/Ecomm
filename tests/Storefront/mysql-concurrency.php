@@ -4,6 +4,10 @@ $test = require __DIR__.'/mysql-environment.php';
 require $test['root'].'/vendor/autoload.php';
 $app = require $test['root'].'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+set_exception_handler(function (Throwable $error) {
+    fwrite(STDERR, get_class($error).': '.$error->getMessage().PHP_EOL);
+    exit(1);
+});
 use App\Services\Storefront\CheckoutService;
 use App\Services\Storefront\PaymentGateway;
 use App\Services\Storefront\PaymentService;
@@ -118,7 +122,8 @@ $order = $checkout->place($c, $q['quote_id'], (string) Str::uuid());
 app(PaymentService::class)->start($c, $order['order_id']);
 $raceResult = $race([['capture', $c, $order['order_id'], ''], ['capture', $c, $order['order_id'], '']]);
 $assert($raceResult[0]['ok'] && $raceResult[1]['ok'] && DB::table('storefront_payment_events')->count() === 1
-    && DB::table('storefront_checkouts')->where('order_id', $order['order_id'])->value('state') === 'committed', 'Capture reconciliation race failed');
+    && DB::table('storefront_checkouts')->where('order_id', $order['order_id'])->value('state') === 'committed', 'Capture reconciliation race failed: '.json_encode($raceResult));
+$captureOrderId = $order['order_id'];
 $results['duplicate_capture'] = $raceResult;
 
 // Expiry racing a capture must either keep reserved stock committed or flag refund review.
@@ -151,5 +156,25 @@ $raceResult = $race([['replace', $c, $returnId, ''], ['replace', $c, $returnId, 
 $assert($raceResult[0]['ok'] && $raceResult[1]['ok'] && $raceResult[0]['order_id'] === $raceResult[1]['order_id']
     && DB::table('orders')->count() === $before + 1 && (int) DB::table('products')->where('product_id', $p)->value('stock') === 1, 'Replacement idempotency race failed');
 $results['duplicate_replacement'] = $raceResult;
+// Different partial refunds racing must converge to the whole verified refund balance.
+$raceResult = $race([['refund-observe', $customer, $captureOrderId, json_encode(['id' => 'rfnd_RaceA', 'amount' => 2500])],
+    ['refund-observe', $customer, $captureOrderId, json_encode(['id' => 'rfnd_RaceB', 'amount' => 7500])]]);
+$assert($raceResult[0]['ok'] && $raceResult[1]['ok']
+    && (int) DB::table('storefront_payment_attempts')->where('order_id', $captureOrderId)->value('refunded_minor') === 10000
+    && DB::table('orders')->where('order_id', $captureOrderId)->value('payment_status') === 'refunded', 'Concurrent refund balance failed: '.json_encode($raceResult));
+$results['partial_refund_balance'] = $raceResult;
+// Two collectors cannot record more cash than the COD order balance.
+$c = $newCustomer();
+$p = $newProduct(3);
+$q = $prepare($c, $p, 'cod');
+$order = $checkout->place($c, $q['quote_id'], (string) Str::uuid());
+DB::table('orders')->where('order_id', $order['order_id'])->update(['status' => 'delivered']);
+DB::table('order_status_logs')->insert(['order_id' => $order['order_id'], 'status' => 'delivered', 'changed_at' => now()] + $stamp);
+$actor = DB::table('users')->insertGetId(['name' => 'Isolated collector', 'email' => 'collector@example.invalid', 'password' => Illuminate\Support\Facades\Hash::make('TestCollectorPassword123!')] + $stamp);
+$raceResult = $race([['cod-collect', $c, $order['order_id'], json_encode(['amount' => 7500, 'key' => (string) Str::uuid(), 'evidence' => 'receipt-race-A', 'actor' => $actor])],
+    ['cod-collect', $c, $order['order_id'], json_encode(['amount' => 7500, 'key' => (string) Str::uuid(), 'evidence' => 'receipt-race-B', 'actor' => $actor])]]);
+$assert(count(array_filter($raceResult, fn ($r) => $r['ok'])) === 1
+    && (int) DB::table('storefront_financial_entries')->where('order_id', $order['order_id'])->where('kind', 'cod_collection')->sum('amount_minor') === 7500, 'Concurrent COD over-collection was accepted: '.json_encode($raceResult));
+$results['cod_collection_balance'] = $raceResult;
 file_put_contents($test['directory'].'/mysql-concurrency-results-'.$databaseName.'.json', json_encode($results, JSON_PRETTY_PRINT));
-echo 'PASS: six isolated MySQL multi-process race scenarios. No live provider calls.', PHP_EOL;
+echo 'PASS: eight isolated MySQL multi-process race scenarios. No live provider calls.', PHP_EOL;

@@ -359,6 +359,17 @@
     <div class="main-content">
         <div class="page-content">
             <div class="container-fluid">
+@if($order_details->payment_method === 'cod' && $order_details->status === 'delivered' && \App\Services\Storefront\CheckoutAccess::enabled() && config('storefront.cod_enabled') && \Illuminate\Support\Facades\DB::table('storefront_checkouts')->where('order_id', $order_details->order_id)->exists())
+<section class="card mb-3"><div class="card-body"><h5>Record COD receipt</h5>
+<p class="text-muted">Record actual collected cash or remittance evidence. This does not initiate a bank transfer.</p>
+<form action="{{ route('orders.cod-receipt', $order_details->order_id) }}" method="POST" class="row g-2">@csrf
+<input type="hidden" name="reference" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
+<label class="col-md-3">Receipt type<select name="kind" class="form-select"><option value="collection">Cash collection</option><option value="remittance">Remittance</option></select></label>
+<label class="col-md-3">Amount (INR)<input name="amount" class="form-control" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" required></label>
+<label class="col-md-4">Receipt / deposit reference<input name="receipt_reference" class="form-control" required minlength="3" maxlength="200"></label>
+<div class="col-md-2 align-self-end"><button class="btn btn-primary" type="submit">Record receipt</button></div></form></div></section>
+@endif
+
                 <div class="breadcrumb">
                     <a href="#">Dashboard &nbsp; </a> / <span> &nbsp; Order Management</span>
                 </div>
@@ -367,7 +378,7 @@
                     <h1 class="page-title">ORDER DETAILS</h1>
                     {!! $order_details->invoice
         ? '<a href="' .
-        asset('storage/Invoices/' . $order_details->invoice->invoice_number . '.pdf') .
+        route('download.invoice', $order_details->invoice->invoice_number . '.pdf') .
         '" 
                                                                                                                                                                                                     download="' .
         $order_details->invoice->invoice_number .

@@ -17,6 +17,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->scoped(\App\Services\Storefront\CatalogInvalidation::class);
         $this->app->bind(\App\Services\Storefront\PaymentGateway::class, \App\Services\Storefront\RazorpayTestGateway::class);
     }
 
@@ -35,5 +36,11 @@ class AppServiceProvider extends ServiceProvider
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
         Paginator::useBootstrapFive();
         Product::observe(ProductObserver::class);
+        foreach ([Product::class, \App\Models\ProductImage::class, \App\Models\ProductDescriptionImage::class,
+            \App\Models\Category::class, \App\Models\SubCategory::class, \App\Models\Brand::class,
+            \App\Models\FeaturedProduct::class, \App\Models\OfferZone::class, \App\Models\Size::class,
+            \App\Models\Unit::class, \App\Models\weight::class, \App\Models\PackagingType::class] as $model) {
+            $model::observe(\App\Observers\CatalogChangeObserver::class);
+        }
     }
 }

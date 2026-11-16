@@ -12,6 +12,10 @@ if (! is_dir($directory)) {
 }
 $database = $directory.'/isolated.sqlite';
 $testKey = getenv('STOREFRONT_RAZORPAY_TEST_KEY') ?: '';
+$testQueue = getenv('STOREFRONT_TEST_QUEUE_CONNECTION') ?: 'sync';
+if (! in_array($testQueue, ['sync', 'database'], true)) {
+    throw new RuntimeException('Only sync or the isolated database queue is allowed.');
+}
 if ($testKey !== '' && ! str_starts_with($testKey, 'rzp_test_')) {
     throw new RuntimeException('Only Razorpay test keys are allowed in this harness.');
 }
@@ -21,8 +25,9 @@ foreach ([
     'APP_KEY' => 'base64:'.base64_encode(hash('sha256', 'storefront-isolated-test-key-not-for-production', true)),
     'APP_URL' => 'http://127.0.0.1:8138',
     'DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => $database, 'DB_URL' => '',
+    'DB_CACHE_CONNECTION' => 'sqlite', 'DB_CACHE_LOCK_CONNECTION' => 'sqlite',
     'CACHE_STORE' => 'array', 'SESSION_DRIVER' => 'array',
-    'QUEUE_CONNECTION' => 'sync', 'MAIL_MAILER' => 'array',
+    'QUEUE_CONNECTION' => $testQueue, 'MAIL_MAILER' => 'array',
     'BROADCAST_CONNECTION' => 'log', 'LOG_CHANNEL' => 'null',
     'RAZORPAY_KEY' => $testKey, 'RAZORPAY_SECRET' => getenv('STOREFRONT_RAZORPAY_TEST_SECRET') ?: '',
     'STOREFRONT_RAZORPAY_TEST_KEY' => $testKey,
@@ -32,6 +37,7 @@ foreach ([
     'STOREFRONT_TEST_SHIPPING_MINOR' => '{"kerala (KL)":0,"tamil_nadu (TN)":5000}',
     'STOREFRONT_TEST_SHIPPING_TAX_BPS' => '0',
     'STOREFRONT_RATE_LIMIT_PATH' => $directory.'/limits',
+    'STOREFRONT_DOCUMENT_ROOT' => $directory.'/documents',
 ] as $key => $value) {
     putenv("$key=$value");
     $_ENV[$key] = $_SERVER[$key] = $value;

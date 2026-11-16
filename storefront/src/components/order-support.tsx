@@ -14,6 +14,8 @@ export function OrderSupport({ order, refreshed }: { order: Order; refreshed: ()
   }, [order]);
   const saved = async () => { setMessage('Return request submitted for review. A refund or replacement is not yet approved.'); await refreshed(); };
   return <div className="order-support">{message && <p role="status" className="form-success">{message}</p>}{error && <p role="alert" className="form-error">{error}</p>}
+    {order.invoice && <a className="button button-outline" href={`/api/customer/document?order_id=${order.order_id}`}>Download invoice</a>}
+    {order.checkout_state === 'payment_review' && <p className="phase-notice">Payment and refund records need review. Fulfillment is paused while the shop checks them.</p>}
     {order.checkout_state === 'refund_required' && <p className="phase-notice">Payment arrived after this reservation was released. Your order will not be fulfilled automatically; refund review is required.</p>}
     {order.checkout_state === 'reserved' && <div className="reservation-panel"><p>Items are reserved until {order.reservation_expires_at || 'the recorded expiry'}. If payment is interrupted, retry this order before creating another.</p><button className="button button-outline" disabled={busy} onClick={async () => {
       setBusy(true); setError(''); try { await customerApi('order-cancel', { order_id: order.order_id }); setMessage('Reservation cancelled. Your bag is saved.'); await refreshed(); } catch (e) { setError(e instanceof Error ? e.message : 'Cancellation could not be confirmed.'); } finally { setBusy(false); }

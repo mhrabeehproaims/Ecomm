@@ -52,14 +52,16 @@ export function activeRecommendations(records: { product_name: string; category?
   });
 }
 
-export function filterProducts(products: Product[], filters: { brand?: string; subcategory?: string; stock?: string; max?: string; sort?: string; collection?: string }): Product[] {
-  const max = numberOrNull(filters.max);
+export function filterProducts(products: Product[], filters: { brand?: string; subcategory?: string; size?: string; stock?: string; min?: string; max?: string; sort?: string; collection?: string }): Product[] {
+  const max = numberOrNull(filters.max), min = numberOrNull(filters.min);
   const result = products.filter(product => {
     const price = productPrice(product);
     return (!filters.brand || product.brand === filters.brand)
       && (!filters.subcategory || product.sub_category === filters.subcategory)
+      && (!filters.size || product.size === filters.size)
       && (filters.stock !== 'in' || (numberOrNull(product.stock) ?? 0) > 0)
       && (max === null || (price !== null && price <= max))
+      && (min === null || (price !== null && price >= min))
       && (filters.collection !== 'offers' || hasOffer(product));
   });
   if (filters.sort === 'price-asc' || filters.sort === 'price-desc') {

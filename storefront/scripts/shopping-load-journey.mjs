@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { chromium, expect } from '@playwright/test';
+const origin='http://127.0.0.1:3140';
+const browser=await chromium.launch();
+try {
+  const page=await browser.newPage({viewport:{width:393,height:852}});
+  assert.equal((await (await page.request.get('http://127.0.0.1:8138/__storefront-test/identity')).json()).environment,'isolated-storefront-test');
+  await page.route('**/*',route=>['http://127.0.0.1:3140','http://127.0.0.1:8138'].includes(new URL(route.request().url()).origin)?route.continue():route.abort());
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+'/login'); await page.getByLabel('Mobile number').fill('9000000011');await page.getByLabel('Password',{exact:true}).fill('FixturePassword123!');await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page).toHaveURL(/\/account$/);
+  await page.goto(origin+'/cart');
+  const row=page.locator('.bag-item').filter({hasText:'QA Cotton Bag'});await expect(row).toBeVisible();
+  await row.getByRole('spinbutton').fill('3');await row.getByRole('button',{name:'Update quantity'}).click();await expect(row.locator('strong')).toContainText('750');
+  await expect(page.getByRole('link',{name:'Your shopping bag, 4 items',exact:true})).toBeVisible();
+  let state=await page.request.get(origin+'/api/customer/shopping-state');assert.match(state.headers()['cache-control'],/no-store/);assert.match(state.headers().vary,/Cookie/);
+  let data=await state.json();assert.equal(data.items.find(item=>item.name==='QA Cotton Bag').quantity,3);assert.equal(data.summary.cartCount,4);assert.equal('password' in data.customer,false);
+  const summary=await (await page.request.get(origin+'/api/customer/shopping-summary')).json();assert.deepEqual(Object.keys(summary).sort(),['cartCount','signedIn','wishlist']);
+  await page.getByRole('navigation',{name:'Customer navigation'}).getByRole('link',{name:'Wishlist',exact:true}).click();
+  const saved=page.locator('.saved-fashion-card').filter({hasText:'QA Cotton Bag'});await expect(saved).toBeVisible();await saved.getByRole('button',{name:'Remove favourite'}).click();await expect(saved).toHaveCount(0);
+  state=await page.request.get(origin+'/api/customer/shopping-state');assert.equal((await state.json()).products.length,0);
+  await page.goto(origin+'/products');const card=page.locator('.product-card').filter({hasText:'QA Cotton Bag'});await card.getByRole('button',{name:'Save QA Cotton Bag to wishlist'}).click();await expect(card.getByRole('button',{name:'Remove QA Cotton Bag from wishlist'})).toHaveAttribute('aria-pressed','true');
+  await page.goto(origin+'/cart');await expect(page.locator('.bag-item').filter({hasText:'QA Cotton Bag'}).getByRole('spinbutton')).toHaveValue('3');
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page).toHaveURL(/\/login$/);assert.equal((await page.request.get(origin+'/api/customer/shopping-state')).status(),401);
+  const phone='94'+String(Date.now()).slice(-8), password='IsolatedLoadingTest123!';
+  assert.equal((await page.request.post(origin+'/api/customer/register',{headers:{Origin:origin},data:{first_name:'Separate shopper',last_name:'Test',phone,password,email:''}})).status(),201);
+  await page.getByLabel('Mobile number').fill(phone);await page.getByLabel('Password',{exact:true}).fill(password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await expect(page).toHaveURL(/\/account$/);
+  await page.goto(origin+'/cart');await expect(page.getByText('Your bag is empty.')).toBeVisible();await page.goto(origin+'/wishlist');await expect(page.getByText('Your wishlist is empty.')).toBeVisible();
+  data=await (await page.request.get(origin+'/api/customer/shopping-state')).json();assert.equal(data.customer.phone,phone);assert.deepEqual(data.items,[]);assert.deepEqual(data.products,[]);assert.equal(data.summary.cartCount,0);
+  assert.deepEqual(errors,[]);
+  await fs.mkdir('artifacts/shopping-load',{recursive:true});await fs.writeFile('artifacts/shopping-load/journey.json',JSON.stringify({passed:true,checks:['quantity and header count refresh','wishlist remove/save refresh','private no-store response','summary omits customer profile','logout revokes read','next shopper receives empty own cart and wishlist'],scriptErrors:errors},null,2));
+  console.log('PASS: real isolated cart/wishlist mutations, badge refresh, private headers, logout and cross-customer isolation.');
+} finally {await browser.close();}
