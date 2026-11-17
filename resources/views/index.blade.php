@@ -1,6 +1,15 @@
 @extends('layouts.app')
 @section('title', 'Dashboard | Vantara')
 @section('content')
+    @push('styles')
+        <style>
+            .dashboard-stat-carousel { position: relative; overflow: hidden; }
+            .dashboard-stat-carousel-track { flex-wrap: nowrap; overflow-x: auto; margin-inline: -12px; padding-inline: 12px 4px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+            .dashboard-stat-carousel-track > [class*="col-"] { flex: 0 0 33.333333%; max-width: 33.333333%; scroll-snap-align: start; }
+            .dashboard-stat-carousel-track .card { height: calc(100% - 24px); }
+            @media (max-width: 767.98px) { .dashboard-stat-carousel-track > [class*="col-"] { flex-basis: 86%; max-width: 86%; } }
+        </style>
+    @endpush
     <div class="main-content">
 
         <div class="page-content">
@@ -102,8 +111,9 @@
                         </div> --}}
                     {{-- </div> --}}
                     <div class="col-xl-12">
-                        <div class="row">
-                            <div class="col-md-3">
+                        <div class="dashboard-stat-carousel" aria-label="Dashboard statistics carousel">
+                        <div class="dashboard-stat-carousel-track row">
+                            <div class="col-md-4">
                                 <div class="card mini-stats-wid">
                                     <div class="card-body">
                                         <div class="d-flex">
@@ -124,7 +134,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="card mini-stats-wid">
                                     <div class="card-body">
                                         <div class="d-flex">
@@ -145,7 +155,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="card mini-stats-wid">
                                     <div class="card-body">
                                         <div class="d-flex">
@@ -165,7 +175,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="card mini-stats-wid">
                                     <div class="card-body">
                                         <div class="d-flex">
@@ -185,6 +195,7 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
                         </div>
                         <!-- end row -->
 

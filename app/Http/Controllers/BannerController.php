@@ -293,8 +293,8 @@ class BannerController extends Controller
 
             $buttonPositionData = $this->getButtonPositionData($request);
             $update_data = [
-                'title' => $request->banner_title ?? '',
-                'description' => $request->subtitle ?? '',
+                'banner_title' => $request->banner_title ?? '',
+                'banner_subtitle' => $request->subtitle ?? '',
                 'button_text' => $request->button_text ?? 'Shop Now',
                 'button_link' => $request->button_link ?? '#new-arrivals',
                 'reference_type' => $request->reference_type,
@@ -309,7 +309,7 @@ class BannerController extends Controller
                 'button_shape' => $request->button_shape ?? 'rounded',
                 'from_date' => $request->f_date,
                 'to_date' => $request->t_date,
-                'status' => $request->banner_status,
+                'banner_status' => $request->banner_status,
                 'sort_order' => $request->banner_order,
             ];
 

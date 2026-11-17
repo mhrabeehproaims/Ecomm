@@ -7,6 +7,7 @@ import { activeBanners, activeRecommendations, hasOffer, safeBannerLink } from '
 import { mediaUrl } from '@/lib/media';
 import { CatalogState, CategoryGrid, ProductGrid, SectionHeading } from '@/components/catalog';
 import { Media } from '@/components/media';
+import { FashionHeroCarousel, type HeroSlide } from '@/components/fashion-hero-carousel';
 
 export const metadata = { title: 'Vanthara — A considered point of view.', alternates: { canonical: '/' } };
 export default async function HomePage() {
@@ -18,11 +19,14 @@ export default async function HomePage() {
   const promotions = banners.ok ? activeBanners(banners.data) : [];
   const campaign = promotions.find(banner => mediaUrl(apiOrigin, banner.banner_image, null, 'BannerImage'));
   const campaignImage = campaign ? mediaUrl(apiOrigin, campaign.banner_image, null, 'BannerImage') : null;
+  const heroSlides: HeroSlide[] = promotions.length > 0
+    ? promotions.slice(0, 3).flatMap(banner => {
+      const image = mediaUrl(apiOrigin, banner.banner_image, null, 'BannerImage');
+      return image ? [{ id: String(banner.banner_id), image, title: banner.banner_title, subtitle: banner.banner_subtitle, buttonText: banner.button_text, buttonLink: banner.button_link, buttonColor: banner.button_color, buttonTextColor: banner.button_text_color, buttonFontSize: banner.button_font_size, buttonShape: banner.button_shape, buttonPositionType: banner.button_position_type, presetPosition: banner.preset_position, buttonX: banner.button_x_position, buttonY: banner.button_y_position, remote: true }] : [];
+    })
+    : [{ id: 'hero-editorial', image: '/fashion/hero-campaign.webp' }, { id: 'hero-detail', image: '/fashion/editorial-campaign.webp' }];
   return <div className="fashion-home">
-    <section className={`fashion-campaign ${campaignImage ? 'fashion-campaign--admin' : ''}`} aria-labelledby="campaign-title">
-      <div className="fashion-campaign-image">{campaignImage ? <Media src={campaignImage} alt={campaign?.banner_title || 'The Vanthara collection'} priority sizes="100vw" /> : <Image src="/fashion/hero-campaign.webp" alt="The Vanthara editorial: contemporary clothing in warm architectural light" fill priority sizes="100vw" />}</div>
-      <div className="container fashion-campaign-inner"><div className="fashion-campaign-copy"><p className="eyebrow">The wardrobe edit</p><h1 id="campaign-title">{campaign?.banner_title || <>An everyday<br /><em>point of view.</em></>}</h1><p>{campaign?.banner_subtitle || 'A fresh perspective on getting dressed. Discover the Vanthara collection.'}</p><Link className="button button-primary" href={campaign ? safeBannerLink(campaign.button_link) : '/products'}>{campaign?.button_text || 'Shop the collection'}<ArrowUpRight size={16} /></Link></div><span className="campaign-signature">VANTHARA / THE EDIT</span></div>
-    </section>
+    <FashionHeroCarousel slides={heroSlides} />
     <div className="fashion-manifesto"><span>Clothing. A little more considered.</span><span className="manifesto-line" aria-hidden="true" /><Link href="/products?sort=newest">Discover your next piece <ArrowRight size={14} /></Link></div>
     <section className="container section fashion-arrivals" id="new-arrivals"><SectionHeading eyebrow="Fresh perspective" title="New arrivals." href="/products?sort=newest" link="View the collection" />{!products.ok ? <CatalogState error /> : active.length ? <ProductGrid products={active.slice(0, 4)} eagerFirst /> : <CatalogState title="The next chapter is coming." description="Our latest pieces will appear here as they join the collection." />}</section>
     <section className="container section fashion-collections" id="categories"><SectionHeading eyebrow="Your wardrobe starts here" title="Find your point of view." href="/categories" link="All collections" />{categories.ok && categories.data.data.length ? <CategoryGrid categories={categories.data.data.slice(0, 4)} /> : <CatalogState compact error={!categories.ok} title="More to discover, soon." description="Explore all available pieces in the collection." />}</section>

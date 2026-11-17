@@ -36,6 +36,7 @@
                 <div class="create-btn py-2">
                     <button class="btn btn-secondary" id="create_banner">Create Banner</button>
                 </div>
+                <div class="alert alert-info py-2" role="note">The storefront homepage hero uses the first three active banners by display order. Manage each slide’s image, title, subtitle, button and dates here.</div>
 
                 <div class="row">
                     <div class="col-12">

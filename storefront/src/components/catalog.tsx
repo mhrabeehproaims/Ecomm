@@ -7,6 +7,7 @@ import { mediaUrl } from '@/lib/media';
 import { Media } from './media';
 import { WishlistToggle } from './shopping-state';
 import { QuickView } from './quick-view';
+import { ProductShare } from './product-share';
 
 export function SectionHeading({ eyebrow, title, href, link = 'Explore all' }: { eyebrow: string; title: string; href?: string; link?: string }) {
   return <div className="section-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>{href && <Link className="text-link" href={href}>{link}<ArrowUpRight size={17} /></Link>}</div>;
@@ -19,7 +20,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
   const discount = price !== null && mrp !== null && mrp > price ? Math.round((1 - price / mrp) * 100) : 0;
   const href = productHref(product);
   return <article className="product-card">
-    <div className="product-image-area"><Link href={href} prefetch={false} className="product-picture" aria-label={`View ${product.product_name}`}><Media src={mediaUrl(apiOrigin, product.primary_image, product.image_path)} alt={product.product_name} priority={priority} sizes="(max-width: 599px) 46vw, (max-width: 1023px) 30vw, (max-width: 1359px) 23vw, 330px" />{discount > 0 && <span className="product-badge">{discount}% less than MRP</span>}</Link><WishlistToggle product={product} /><QuickView productId={product.product_id} name={product.product_name} imageOrigin={apiOrigin} /></div>
+    <div className="product-image-area"><Link href={href} prefetch={false} className="product-picture" aria-label={`View ${product.product_name}`}><Media src={mediaUrl(apiOrigin, product.primary_image, product.image_path)} alt={product.product_name} priority={priority} sizes="(max-width: 599px) 46vw, (max-width: 1023px) 30vw, (max-width: 1359px) 23vw, 330px" />{discount > 0 && (stock === null || stock <= 0) && <span className="product-badge product-badge--sale">Sale</span>}{stock !== null && stock <= 0 && <span className="product-badge product-badge--stock">Out of Stock</span>}</Link><div className="product-card-actions"><WishlistToggle product={product} /><ProductShare name={product.product_name} path={href} /></div><QuickView productId={product.product_id} name={product.product_name} imageOrigin={apiOrigin} /></div>
     <div className="product-copy"><p className="product-category">{product.category || product.brand || 'Vanthara collection'}</p><h3><Link href={href} prefetch={false} title={product.product_name}>{product.product_name}</Link></h3><p className="product-size">{[product.size, product.brand].filter(Boolean).join(' · ') || 'Discover this piece'}</p><div className="product-bottom"><div className="price">{price !== null ? money(price) : 'Price unavailable'}{price !== null && mrp !== null && mrp > price && <del>{money(mrp)}</del>}</div><Link href={href} prefetch={false} className="product-open" aria-label={`Explore ${product.product_name}`}><ArrowUpRight size={20} /></Link></div><p className={`stock-label ${stock !== null && stock > 0 ? 'available' : ''}`}>{stock === null ? 'Availability not provided' : stock > 0 ? 'In stock' : 'Currently unavailable'}</p></div>
   </article>;
 }

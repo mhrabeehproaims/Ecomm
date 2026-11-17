@@ -20,6 +20,9 @@ export type Brand = z.infer<typeof brandSchema>;
 export const bannerSchema = z.object({
   banner_id: z.union([z.string(), z.number()]), banner_image: text, banner_title: text,
   banner_subtitle: text, button_text: text, button_link: text,
+  button_position_type: text, preset_position: text,
+  button_x_position: amount, button_y_position: amount,
+  button_color: text, button_text_color: text, button_font_size: text, button_shape: text,
   from_date: text, to_date: text, sort_order: amount,
 });
 export type Banner = z.infer<typeof bannerSchema>;

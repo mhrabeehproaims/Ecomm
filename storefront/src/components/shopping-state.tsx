@@ -7,6 +7,7 @@ import { customerApi, CustomerClientError } from '@/lib/customer-client';
 import { shoppingKey } from '@/lib/shopping-key';
 import { loadShoppingSnapshot, invalidateShoppingSnapshot } from '@/lib/shopping-request';
 import type { ShoppingSummary } from '@/lib/shopping-contracts';
+import { AuthAlert } from './auth-alert';
 
 type Summary = ShoppingSummary;
 type ShoppingState = { summary: Summary | null; status: 'loading' | 'ready' | 'error'; acceptSummary: (summary: Summary) => void };
@@ -65,7 +66,7 @@ export function WishlistToggle({ product, className = '' }: { product: { product
   return <div className={`wishlist-control ${className}`}><button type="button" className={`icon-button wishlist-toggle ${saved ? 'is-saved' : ''}`} aria-label={status === 'loading' ? `Loading wishlist for ${product.product_name}` : !state ? `Wishlist unavailable for ${product.product_name}` : `${saved ? 'Remove' : 'Save'} ${product.product_name} ${saved ? 'from' : 'to'} wishlist`} title={status === 'error' ? 'Wishlist could not be loaded. Reload the page to try again.' : undefined} aria-busy={busy || status === 'loading'} aria-pressed={saved} disabled={busy || status !== 'ready' || !state} onClick={async () => {
     setBusy(true); setMessage(''); setNeedsLogin(false);
     try { const result = await customerApi<{ message: string }>('wishlist', { product_id: product.product_id }); setMessage(result.message || 'Wishlist updated.'); }
-    catch (error) { setNeedsLogin(error instanceof CustomerClientError && error.status === 401); setMessage(error instanceof Error ? error.message : 'Please try again.'); }
+    catch (error) { if (error instanceof CustomerClientError && [401, 403].includes(error.status)) { setNeedsLogin(true); setMessage(''); } else setMessage(error instanceof Error ? error.message : 'Please try again.'); }
     finally { setBusy(false); }
-  }}><Heart size={19} strokeWidth={1.4} fill={saved ? 'currentColor' : 'none'} aria-hidden="true" /></button>{message && <div className="wishlist-feedback" role="status">{message}{needsLogin && <Link href="/login?next=%2Fwishlist">Sign in to save</Link>}<button type="button" aria-label="Dismiss wishlist message" onClick={() => setMessage('')}>Dismiss</button></div>}</div>;
+  }}><Heart size={19} strokeWidth={1.4} fill={saved ? 'currentColor' : 'none'} aria-hidden="true" /></button>{message && <div className="wishlist-feedback" role="status">{message}<button type="button" aria-label="Dismiss wishlist message" onClick={() => setMessage('')}>Dismiss</button></div>}<AuthAlert open={needsLogin} onClose={() => setNeedsLogin(false)} /></div>;
 }
